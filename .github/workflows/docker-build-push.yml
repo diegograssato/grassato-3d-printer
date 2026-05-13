@@ -63,6 +63,7 @@ jobs:
             --entrypoint python \
             -e SECRET_KEY=ci-dummy-key-not-for-production \
             -e DB_ENGINE=sqlite3 \
+            -e DB_NAME=/tmp/ci.sqlite3 \
             -e DEBUG=True \
             grassato-3d:ci \
             manage.py check
@@ -75,6 +76,7 @@ jobs:
             -p 8000:8000 \
             -e SECRET_KEY=ci-dummy-key-not-for-production \
             -e DB_ENGINE=sqlite3 \
+            -e DB_NAME=/tmp/ci.sqlite3 \
             -e DEBUG=True \
             -e DJANGO_SUPERUSER_USERNAME=ci \
             -e DJANGO_SUPERUSER_EMAIL=ci@ci.local \
