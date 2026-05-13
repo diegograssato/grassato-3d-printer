@@ -1,0 +1,103 @@
+# ──────────────────────────────────────────────
+# docker-compose de produção — MySQL + Redis
+# Uso: docker compose up -d --build
+# ──────────────────────────────────────────────
+
+services:
+
+  # ── MySQL 8 ──────────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: grassato-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-grassato3d}
+      MYSQL_USER: ${DB_USER:-grassato}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-changeme}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootchangeme}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootchangeme}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis 7 ──────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: grassato-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ── Django + Gunicorn ─────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: grassato-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-insecure-key-change-me}
+      DEBUG: "False"
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DB_ENGINE: mysql
+      DB_NAME: ${DB_NAME:-grassato3d}
+      DB_USER: ${DB_USER:-grassato}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      DB_HOST: db
+      DB_PORT: "3306"
+      REDIS_URL: redis://redis:6379/0
+      GUNICORN_WORKERS: "3"
+      GUNICORN_THREADS: "4"
+      # Superusuário criado automaticamente na primeira inicialização
+      DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-admin}
+      DJANGO_SUPERUSER_EMAIL: ${DJANGO_SUPERUSER_EMAIL:-admin@grassato.local}
+      DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD:-admin123}
+    volumes:
+      - static_files:/app/staticfiles
+    networks:
+      - backend
+      - frontend
+
+  # ── Nginx (proxy reverso + static files) ─────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: grassato-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+    volumes:
+      - static_files:/usr/share/nginx/html/static:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - frontend
+
+volumes:
+  mysql_data:
+  redis_data:
+  static_files:
+
+networks:
+  backend:
+    driver: bridge
+  frontend:
+    driver: bridge

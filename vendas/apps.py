@@ -1,0 +1,10 @@
+from django.apps import AppConfig
+
+
+class VendasConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'vendas'
+    verbose_name = 'Vendas'
+
+    def ready(self):
+        import vendas.signals  # noqa: F401

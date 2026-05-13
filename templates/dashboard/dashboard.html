@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Dashboard</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+  <h4 class="mb-0 fw-semibold"><i class="bi bi-speedometer2 me-2 text-primary"></i>Dashboard</h4>
+</div>
+
+<!-- ── Cards Métricas ── -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card card-metric green p-3">
+      <div class="text-muted small mb-1">Receita do Mês</div>
+      <div class="fs-5 fw-bold text-success">R$ {{ receita_mes|floatformat:2 }}</div>
+      <div class="text-muted" style="font-size:.7rem">Entradas no mês atual</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card card-metric red p-3">
+      <div class="text-muted small mb-1">Despesas do Mês</div>
+      <div class="fs-5 fw-bold text-danger">R$ {{ despesas_mes|floatformat:2 }}</div>
+      <div class="text-muted" style="font-size:.7rem">Saídas no mês atual</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card card-metric {% if lucro_mes >= 0 %}blue{% else %}red{% endif %} p-3">
+      <div class="text-muted small mb-1">Lucro do Mês</div>
+      <div class="fs-5 fw-bold {% if lucro_mes >= 0 %}text-primary{% else %}text-danger{% endif %}">
+        R$ {{ lucro_mes|floatformat:2 }}
+      </div>
+      <div class="text-muted" style="font-size:.7rem">Receita − Despesas</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card card-metric yellow p-3">
+      <div class="text-muted small mb-1">Saldo Total</div>
+      <div class="fs-5 fw-bold {% if saldo_caixa >= 0 %}text-success{% else %}text-danger{% endif %}">
+        R$ {{ saldo_caixa|floatformat:2 }}
+      </div>
+      <div class="text-muted" style="font-size:.7rem">Saldo acumulado geral</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Gráfico + Alertas ── -->
+<div class="row g-3 mb-4">
+  <div class="col-md-7">
+    <div class="card p-3">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0 fw-semibold">Receitas × Despesas (6 meses)</h6>
+      </div>
+      <canvas id="chartFinanceiro" height="110"></canvas>
+    </div>
+  </div>
+
+  <div class="col-md-5">
+    <!-- Alertas filamentos -->
+    <div class="card p-3 mb-3">
+      <h6 class="fw-semibold mb-2">
+        <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>Filamentos com Estoque Baixo
+      </h6>
+      {% if filamentos_criticos %}
+        {% for f in filamentos_criticos %}
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small">
+            <span>{{ f.material }} {{ f.cor }} — {{ f.nome }}</span>
+            <span class="badge bg-{{ f.status_estoque.0 }}">{{ f.status_estoque.1 }}</span>
+          </div>
+          <div class="progress mt-1">
+            <div class="progress-bar bg-{{ f.status_estoque.0 }}"
+                 style="width:{{ f.percentual_disponivel }}%"></div>
+          </div>
+          <div class="text-muted" style="font-size:.68rem">
+            {{ f.peso_disponivel_g|floatformat:0 }}g de {{ f.peso_total_g|floatformat:0 }}g ({{ f.percentual_disponivel }}%)
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="text-muted small mb-0"><i class="bi bi-check-circle-fill text-success me-1"></i>Todos os filamentos com estoque adequado.</p>
+      {% endif %}
+    </div>
+
+    <!-- Alertas produtos -->
+    <div class="card p-3">
+      <h6 class="fw-semibold mb-2">
+        <i class="bi bi-box-seam text-danger me-1"></i>Produtos com Estoque ≤ 2
+      </h6>
+      {% if produtos_criticos %}
+        <ul class="list-unstyled mb-0">
+          {% for p in produtos_criticos %}
+          <li class="d-flex justify-content-between align-items-center py-1 border-bottom">
+            <span class="small">{{ p.nome }}</span>
+            <span class="badge bg-{% if p.estoque_quantidade == 0 %}danger{% else %}warning text-dark{% endif %}">
+              {{ p.estoque_quantidade }} un
+            </span>
+          </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-muted small mb-0"><i class="bi bi-check-circle-fill text-success me-1"></i>Todos os produtos com estoque adequado.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- ── Vendas Recentes ── -->
+<div class="card">
+  <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+    <h6 class="mb-0 fw-semibold"><i class="bi bi-clock-history me-1"></i>Vendas Recentes</h6>
+    <a href="{% url 'vendas:venda_list' %}" class="btn btn-sm btn-outline-primary">Ver todas</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 small">
+      <thead class="table-light">
+        <tr>
+          <th>Data</th><th>Produto</th><th class="text-center">Qtd</th>
+          <th class="text-end">Total</th><th>Pagamento</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in vendas_recentes %}
+        <tr>
+          <td>{{ v.data|date:"d/m/Y" }}</td>
+          <td>{{ v.produto.nome }}</td>
+          <td class="text-center">{{ v.quantidade }}</td>
+          <td class="text-end text-success fw-semibold">R$ {{ v.total|floatformat:2 }}</td>
+          <td><span class="badge bg-secondary">{{ v.get_forma_pagamento_display }}</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted py-3">Nenhuma venda registrada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const ctx = document.getElementById('chartFinanceiro');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: {{ chart_labels|safe }},
+    datasets: [
+      {
+        label: 'Receitas',
+        data: {{ chart_receitas|safe }},
+        backgroundColor: 'rgba(25,135,84,.75)',
+        borderRadius: 4,
+      },
+      {
+        label: 'Despesas',
+        data: {{ chart_despesas|safe }},
+        backgroundColor: 'rgba(220,53,69,.65)',
+        borderRadius: 4,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      y: {
+        ticks: {
+          callback: v => 'R$ ' + v.toFixed(0)
+        }
+      }
+    }
+  }
+});
+</script>
+{% endblock %}

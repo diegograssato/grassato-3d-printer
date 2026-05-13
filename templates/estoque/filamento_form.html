@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'estoque:filamento_list' %}">Filamentos</a></li>
+<li class="breadcrumb-item active">{{ titulo }}</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-3">
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-archive me-2 text-primary"></i>{{ titulo }}</h5>
+      </div>
+      <div class="card-body p-4">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">{{ form.nome.label }}</label>
+              {{ form.nome }}
+              {% if form.nome.errors %}<div class="text-danger small mt-1">{{ form.nome.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">{{ form.material.label }}</label>
+              {{ form.material }}
+              {% if form.material.errors %}<div class="text-danger small mt-1">{{ form.material.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">{{ form.cor.label }}</label>
+              {{ form.cor }}
+              {% if form.cor.errors %}<div class="text-danger small mt-1">{{ form.cor.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">{{ form.peso_total_g.label }}</label>
+              <div class="input-group">
+                {{ form.peso_total_g }}
+                <span class="input-group-text">g</span>
+              </div>
+              {% if form.peso_total_g.errors %}<div class="text-danger small mt-1">{{ form.peso_total_g.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">{{ form.peso_disponivel_g.label }}</label>
+              <div class="input-group">
+                {{ form.peso_disponivel_g }}
+                <span class="input-group-text">g</span>
+              </div>
+              {% if form.peso_disponivel_g.help_text %}
+                <div class="form-text text-muted">{{ form.peso_disponivel_g.help_text }}</div>
+              {% endif %}
+              {% if form.peso_disponivel_g.errors %}<div class="text-danger small mt-1">{{ form.peso_disponivel_g.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">{{ form.preco_por_kg.label }}</label>
+              <div class="input-group">
+                <span class="input-group-text">R$</span>
+                {{ form.preco_por_kg }}
+              </div>
+              {% if form.preco_por_kg.errors %}<div class="text-danger small mt-1">{{ form.preco_por_kg.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">{{ form.fornecedor.label }} <span class="text-muted fw-normal">(opcional)</span></label>
+              {{ form.fornecedor }}
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-check-lg me-1"></i>Salvar
+            </button>
+            <a href="{% url 'estoque:filamento_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

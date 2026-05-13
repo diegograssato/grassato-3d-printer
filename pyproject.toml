@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "grassato-3d"
+version = "0.1.0"
+description = "Sistema de gestão para negócio de impressão 3D"
+authors = ["Grassato"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+django = "^4.2"
+python-decouple = "^3.8"
+whitenoise = "^6.6"
+gunicorn = "^22.0"
+mysqlclient = "^2.2"
+django-redis = "^5.4"
+
+[tool.poetry.group.dev.dependencies]
+django-debug-toolbar = "^4.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

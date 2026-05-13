@@ -1,0 +1,139 @@
+name: CI — Build · Validate · Push
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main, master]
+
+# Cancela execuções antigas do mesmo branch/PR ao receber novo push
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/grassato-3d-printer
+
+jobs:
+  build-validate-push:
+    name: Build · Validate · Push
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # ── 2. Buildx (suporte multi-arch e cache) ─────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # ── 3. Metadados e tags automáticas ────────────────────────────────
+      #   Push para main   → latest + sha-xxxxxxx
+      #   Tag v1.2.3       → 1.2.3 + 1.2 + latest
+      #   Pull Request     → pr-42
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+
+      # ── 4. Build local (sem push) para validação ───────────────────────
+      - name: Build image (local)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true                      # carrega no docker local
+          tags: grassato-3d:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── 5. Validação: Django system check ─────────────────────────────
+      - name: Validate — Django system check
+        run: |
+          docker run --rm \
+            --entrypoint python \
+            -e SECRET_KEY=ci-dummy-key-not-for-production \
+            -e DB_ENGINE=sqlite3 \
+            -e DEBUG=True \
+            grassato-3d:ci \
+            manage.py check
+          echo "✅ Django system check passed"
+
+      # ── 6. Validação: Container sobe e responde HTTP ───────────────────
+      - name: Validate — HTTP smoke test
+        run: |
+          docker run -d --name grassato-ci \
+            -p 8000:8000 \
+            -e SECRET_KEY=ci-dummy-key-not-for-production \
+            -e DB_ENGINE=sqlite3 \
+            -e DEBUG=True \
+            -e DJANGO_SUPERUSER_USERNAME=ci \
+            -e DJANGO_SUPERUSER_EMAIL=ci@ci.local \
+            -e DJANGO_SUPERUSER_PASSWORD=Ci@TestOnly123 \
+            grassato-3d:ci
+
+          echo "Aguardando container inicializar (máx 30s)..."
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:8000/ > /dev/null 2>&1; then
+              echo "✅ Container respondeu na tentativa $i"
+              break
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "❌ Container não respondeu após 30s"
+              docker logs grassato-ci
+              docker stop grassato-ci && docker rm grassato-ci
+              exit 1
+            fi
+            sleep 2
+          done
+
+          # Verifica rotas principais
+          curl --fail --silent http://localhost:8000/          > /dev/null && echo "✅ GET /"
+          curl --fail --silent http://localhost:8000/vendas/   > /dev/null && echo "✅ GET /vendas/"
+          curl --fail --silent http://localhost:8000/caixa/    > /dev/null && echo "✅ GET /caixa/"
+          curl --fail --silent http://localhost:8000/balancete/ > /dev/null && echo "✅ GET /balancete/"
+
+          docker stop grassato-ci && docker rm grassato-ci
+
+      # ── 7. Login Docker Hub (somente fora de PR) ───────────────────────
+      - name: Login Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ── 8. Build multi-arch + Push (somente fora de PR) ───────────────
+      - name: Build & Push (linux/amd64 + linux/arm64)
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── 9. Resumo no GitHub Actions summary ───────────────────────────
+      - name: Summary
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "## 🐳 Docker Push concluído" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags publicadas:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 https://hub.docker.com/r/${{ env.IMAGE }}" >> $GITHUB_STEP_SUMMARY

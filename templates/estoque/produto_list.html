@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Produtos{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Produtos</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+  <h4 class="mb-0 fw-semibold"><i class="bi bi-box-seam me-2 text-primary"></i>Produtos</h4>
+  <a href="{% url 'estoque:produto_create' %}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>Novo Produto
+  </a>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 small align-middle">
+      <thead class="table-dark">
+        <tr>
+          <th>Nome</th>
+          <th>Filamento</th>
+          <th class="text-end">Peso/un (g)</th>
+          <th class="text-end">Comp. (m)</th>
+          <th class="text-end">Custo</th>
+          <th class="text-end">Venda</th>
+          <th class="text-end">Margem</th>
+          <th class="text-center">Estoque</th>
+          <th class="text-center">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in produtos %}
+        <tr>
+          <td class="fw-semibold">{{ p.nome }}</td>
+          <td>
+            <span class="badge bg-secondary">{{ p.filamento.material }}</span>
+            {{ p.filamento.cor }}
+          </td>
+          <td class="text-end">{{ p.peso_filamento_g|floatformat:1 }}</td>
+          <td class="text-end">{{ p.comprimento_filamento_m|floatformat:2 }}</td>
+          <td class="text-end text-muted">R$ {{ p.preco_custo|floatformat:2 }}</td>
+          <td class="text-end text-success fw-semibold">R$ {{ p.preco_venda|floatformat:2 }}</td>
+          <td class="text-end">
+            <span class="badge {% if p.margem_lucro_pct >= 30 %}bg-success{% elif p.margem_lucro_pct >= 15 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+              {{ p.margem_lucro_pct }}%
+            </span>
+          </td>
+          <td class="text-center">
+            <span class="badge {% if p.estoque_quantidade == 0 %}bg-danger{% elif p.estoque_quantidade <= 2 %}bg-warning text-dark{% else %}bg-success{% endif %}">
+              {{ p.estoque_quantidade }} un
+            </span>
+          </td>
+          <td class="text-center text-nowrap">
+            <a href="{% url 'estoque:produto_update' p.pk %}" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Editar">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <a href="{% url 'estoque:produto_delete' p.pk %}" class="btn btn-sm btn-outline-danger py-0 px-1 ms-1" title="Desativar">
+              <i class="bi bi-trash"></i>
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="9" class="text-center text-muted py-4">
+            Nenhum produto cadastrado. <a href="{% url 'estoque:produto_create' %}">Cadastrar agora</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% if inativos %}
+<p class="text-muted small mt-2">
+  <i class="bi bi-eye-slash me-1"></i>{{ inativos }} produto(s) desativado(s) não exibido(s).
+</p>
+{% endif %}
+{% endblock %}

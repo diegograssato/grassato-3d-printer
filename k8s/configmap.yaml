@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grassato-config
+  namespace: grassato-3d
+data:
+  DEBUG: "False"
+  ALLOWED_HOSTS: "grassato.example.com,localhost"
+  DB_ENGINE: "mysql"
+  DB_NAME: "grassato3d"
+  DB_HOST: "mysql-service"          # nome do Service do MySQL no cluster
+  DB_PORT: "3306"
+  REDIS_URL: "redis://redis-service:6379/0"   # nome do Service do Redis no cluster
+  GUNICORN_WORKERS: "3"
+  GUNICORN_THREADS: "4"
+  DJANGO_SETTINGS_MODULE: "config.settings"

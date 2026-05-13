@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grassato-ingress
+  namespace: grassato-3d
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    # Habilite TLS com cert-manager em produção:
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: grassato.example.com        # substitua pelo seu domínio
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grassato-service
+                port:
+                  number: 80
+  # TLS — descomente e configure para HTTPS:
+  # tls:
+  #   - hosts:
+  #       - grassato.example.com
+  #     secretName: grassato-tls

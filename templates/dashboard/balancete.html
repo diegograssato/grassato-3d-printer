@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Balancete Mensal{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Balancete</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+  <h4 class="mb-0 fw-semibold">
+    <i class="bi bi-file-earmark-bar-graph me-2 text-primary"></i>Balancete Mensal
+  </h4>
+  <a href="{% url 'dashboard:dashboard' %}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Dashboard
+  </a>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 small align-middle">
+      <thead class="table-dark">
+        <tr>
+          <th>Mês</th>
+          <th class="text-center">Vendas</th>
+          <th class="text-end">Faturamento</th>
+          <th class="text-end text-success">Entradas</th>
+          <th class="text-end text-danger">Saídas</th>
+          <th class="text-end">Resultado</th>
+          <th class="text-end">Saldo Acumulado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in resumo %}
+        <tr>
+          <td class="fw-semibold">{{ r.mes_label }}</td>
+          <td class="text-center">
+            <span class="badge bg-secondary">{{ r.qtd_vendas }}</span>
+          </td>
+          <td class="text-end">R$ {{ r.total_vendas|floatformat:2 }}</td>
+          <td class="text-end text-success">R$ {{ r.entradas|floatformat:2 }}</td>
+          <td class="text-end text-danger">R$ {{ r.saidas|floatformat:2 }}</td>
+          <td class="text-end fw-semibold {% if r.lucro >= 0 %}text-primary{% else %}text-danger{% endif %}">
+            {% if r.lucro >= 0 %}+{% endif %}R$ {{ r.lucro|floatformat:2 }}
+          </td>
+          <td class="text-end fw-bold {% if r.saldo_acumulado >= 0 %}text-success{% else %}text-danger{% endif %}">
+            R$ {{ r.saldo_acumulado|floatformat:2 }}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-4">Nenhum dado encontrado.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if resumo %}
+      <tfoot class="table-light fw-bold">
+        {% with ultimo=resumo|last %}
+        <tr>
+          <td colspan="4" class="text-end">Saldo acumulado final:</td>
+          <td colspan="3" class="text-end fs-6 {% if ultimo.saldo_acumulado >= 0 %}text-success{% else %}text-danger{% endif %}">
+            R$ {{ ultimo.saldo_acumulado|floatformat:2 }}
+          </td>
+        </tr>
+        {% endwith %}
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+
+<p class="text-muted small mt-2">
+  <i class="bi bi-info-circle me-1"></i>
+  Exibindo os últimos 12 meses. Entradas incluem vendas e outras receitas. Saídas incluem despesas manuais.
+</p>
+{% endblock %}

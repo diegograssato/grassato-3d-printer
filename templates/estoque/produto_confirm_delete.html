@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Desativar Produto{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'estoque:produto_list' %}">Produtos</a></li>
+<li class="breadcrumb-item active">Desativar</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-4">
+  <div class="col-md-5">
+    <div class="card border-warning">
+      <div class="card-header bg-warning text-dark py-3">
+        <h5 class="mb-0"><i class="bi bi-eye-slash me-2"></i>Confirmar Desativação</h5>
+      </div>
+      <div class="card-body p-4">
+        <p>Deseja desativar o produto <strong>{{ objeto }}</strong>?</p>
+        <p class="text-muted small">O produto não será excluído permanentemente — apenas ficará oculto nas listagens e não poderá ser vendido.</p>
+        <form method="post" class="d-flex gap-2">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-warning">
+            <i class="bi bi-eye-slash me-1"></i>Sim, desativar
+          </button>
+          <a href="{% url 'estoque:produto_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

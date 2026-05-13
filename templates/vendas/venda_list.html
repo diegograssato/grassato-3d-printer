@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Vendas{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Vendas</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-3">
+  <h4 class="mb-0 fw-semibold"><i class="bi bi-cart3 me-2 text-primary"></i>Vendas</h4>
+  <a href="{% url 'vendas:venda_create' %}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>Nova Venda
+  </a>
+</div>
+
+<!-- Filtro por mês -->
+<div class="card mb-3 p-3">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="form-label small mb-1">Filtrar por mês</label>
+      <input type="month" name="mes" value="{{ mes_filtro }}" class="form-control form-control-sm">
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-sm btn-outline-primary">Filtrar</button>
+      {% if mes_filtro %}
+      <a href="{% url 'vendas:venda_list' %}" class="btn btn-sm btn-outline-secondary ms-1">Limpar</a>
+      {% endif %}
+    </div>
+    {% if total_valor %}
+    <div class="col-auto ms-auto text-end">
+      <div class="text-muted small">{{ total_qtd }} unidades vendidas</div>
+      <div class="fw-bold text-success">Total: R$ {{ total_valor|floatformat:2 }}</div>
+    </div>
+    {% endif %}
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 small align-middle">
+      <thead class="table-dark">
+        <tr>
+          <th>#</th>
+          <th>Data</th>
+          <th>Produto</th>
+          <th class="text-center">Qtd</th>
+          <th class="text-end">Preço Unit.</th>
+          <th class="text-end">Total</th>
+          <th>Pagamento</th>
+          <th>Observações</th>
+          <th class="text-center">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in vendas %}
+        <tr>
+          <td class="text-muted">{{ v.pk }}</td>
+          <td>{{ v.data|date:"d/m/Y" }}</td>
+          <td class="fw-semibold">{{ v.produto.nome }}</td>
+          <td class="text-center">{{ v.quantidade }}</td>
+          <td class="text-end text-muted">R$ {{ v.preco_unitario|floatformat:2 }}</td>
+          <td class="text-end text-success fw-semibold">R$ {{ v.total|floatformat:2 }}</td>
+          <td><span class="badge bg-secondary">{{ v.get_forma_pagamento_display }}</span></td>
+          <td class="text-muted">{{ v.observacoes|truncatechars:30|default:"—" }}</td>
+          <td class="text-center">
+            <a href="{% url 'vendas:venda_delete' v.pk %}" class="btn btn-sm btn-outline-danger py-0 px-1" title="Excluir">
+              <i class="bi bi-trash"></i>
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="9" class="text-center text-muted py-4">
+            Nenhuma venda encontrada. <a href="{% url 'vendas:venda_create' %}">Registrar venda</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

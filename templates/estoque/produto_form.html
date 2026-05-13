@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'estoque:produto_list' %}">Produtos</a></li>
+<li class="breadcrumb-item active">{{ titulo }}</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-3">
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-semibold"><i class="bi bi-box-seam me-2 text-primary"></i>{{ titulo }}</h5>
+      </div>
+      <div class="card-body p-4">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">{{ form.nome.label }}</label>
+              {{ form.nome }}
+              {% if form.nome.errors %}<div class="text-danger small mt-1">{{ form.nome.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">{{ form.descricao.label }} <span class="text-muted fw-normal">(opcional)</span></label>
+              {{ form.descricao }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">{{ form.filamento.label }}</label>
+              {{ form.filamento }}
+              {% if form.filamento.errors %}<div class="text-danger small mt-1">{{ form.filamento.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">{{ form.peso_filamento_g.label }}</label>
+              <div class="input-group">
+                {{ form.peso_filamento_g }}
+                <span class="input-group-text">g</span>
+              </div>
+              {% if form.peso_filamento_g.errors %}<div class="text-danger small mt-1">{{ form.peso_filamento_g.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">{{ form.comprimento_filamento_m.label }}</label>
+              <div class="input-group">
+                {{ form.comprimento_filamento_m }}
+                <span class="input-group-text">m</span>
+              </div>
+              {% if form.comprimento_filamento_m.errors %}<div class="text-danger small mt-1">{{ form.comprimento_filamento_m.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">{{ form.tempo_impressao_horas.label }}</label>
+              <div class="input-group">
+                {{ form.tempo_impressao_horas }}
+                <span class="input-group-text">h</span>
+              </div>
+              {% if form.tempo_impressao_horas.errors %}<div class="text-danger small mt-1">{{ form.tempo_impressao_horas.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">{{ form.preco_custo.label }}</label>
+              <div class="input-group">
+                <span class="input-group-text">R$</span>
+                {{ form.preco_custo }}
+              </div>
+              <div class="form-text text-muted">Custo de produção total</div>
+              {% if form.preco_custo.errors %}<div class="text-danger small mt-1">{{ form.preco_custo.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">{{ form.preco_venda.label }}</label>
+              <div class="input-group">
+                <span class="input-group-text">R$</span>
+                {{ form.preco_venda }}
+              </div>
+              {% if form.preco_venda.errors %}<div class="text-danger small mt-1">{{ form.preco_venda.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">{{ form.estoque_quantidade.label }}</label>
+              {{ form.estoque_quantidade }}
+              {% if form.estoque_quantidade.errors %}<div class="text-danger small mt-1">{{ form.estoque_quantidade.errors.0 }}</div>{% endif %}
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-check-lg me-1"></i>Salvar
+            </button>
+            <a href="{% url 'estoque:produto_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

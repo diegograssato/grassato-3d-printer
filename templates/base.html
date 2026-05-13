@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>{% block title %}Grassato's 3D{% endblock %} | Gestão</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root {
+      --sidebar-w: 240px;
+      --topbar-h: 52px;
+      --bottom-nav-h: 60px;
+    }
+    * { box-sizing: border-box; }
+    body { background: #f1f3f5; font-size: .9rem; overflow-x: hidden; }
+
+    /* ══ SIDEBAR ══ */
+    .sidebar {
+      width: var(--sidebar-w); height: 100vh;
+      position: fixed; top: 0; left: 0;
+      background: linear-gradient(175deg,#0d1b2a 0%,#1b263b 60%,#0a3d62 100%);
+      z-index: 1040; overflow-y: auto; overflow-x: hidden;
+      transition: transform .28s cubic-bezier(.4,0,.2,1);
+      display: flex; flex-direction: column;
+    }
+    .sidebar .brand { padding: 1.1rem 1rem .9rem; border-bottom: 1px solid rgba(255,255,255,.08); }
+    .sidebar .nav-section {
+      font-size: .62rem; letter-spacing: 1.3px; text-transform: uppercase;
+      color: rgba(255,255,255,.35); padding: .8rem 1.2rem .15rem;
+    }
+    .sidebar .nav-link {
+      color: rgba(255,255,255,.72); padding: .48rem 1rem;
+      border-radius: .4rem; margin: .08rem .45rem;
+      transition: all .16s; display: flex; align-items: center;
+    }
+    .sidebar .nav-link i { width: 18px; text-align: center; }
+    .sidebar .nav-link:hover  { color:#fff; background:rgba(255,255,255,.12); }
+    .sidebar .nav-link.active { color:#fff; background:rgba(255,255,255,.18); font-weight:500; }
+
+    /* ══ OVERLAY ══ */
+    .sidebar-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); z-index: 1039;
+      backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+    }
+    .sidebar-overlay.show { display: block; }
+
+    /* ══ MAIN ══ */
+    .main-content { margin-left: var(--sidebar-w); min-height: 100vh; display: flex; flex-direction: column; }
+    .topbar {
+      background: #fff; border-bottom: 1px solid #dee2e6;
+      padding: .55rem 1.25rem; position: sticky; top: 0; z-index: 100;
+      min-height: var(--topbar-h); display: flex; align-items: center; gap: .5rem;
+    }
+    .page-content { flex: 1; padding: 1rem 1.25rem 5rem; }
+
+    /* ══ CARDS ══ */
+    .card { border: none; box-shadow: 0 1px 4px rgba(0,0,0,.08); border-radius: .65rem; }
+    .card-metric { border-left: 4px solid; }
+    .card-metric.green  { border-color: #198754; }
+    .card-metric.red    { border-color: #dc3545; }
+    .card-metric.blue   { border-color: #0d6efd;  }
+    .card-metric.yellow { border-color: #ffc107; }
+    .progress { height: 8px; border-radius: 4px; }
+    .table-responsive { -webkit-overflow-scrolling: touch; }
+
+    /* ══ BOTTOM NAV ══ */
+    .bottom-nav {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0;
+      height: var(--bottom-nav-h); background: #fff;
+      border-top: 1px solid #dee2e6; z-index: 1030;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .bottom-nav a {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; color: #6c757d; text-decoration: none;
+      font-size: .6rem; gap: .1rem; border-radius: .35rem;
+      padding: .3rem .1rem; transition: color .15s;
+    }
+    .bottom-nav a i { font-size: 1.2rem; }
+    .bottom-nav a.active, .bottom-nav a:hover { color: #0d6efd; }
+
+    /* ══ RESPONSIVE ══ */
+    @media (max-width: 991.98px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,.35); }
+      .main-content { margin-left: 0; }
+      .bottom-nav { display: flex; }
+      .page-content { padding-bottom: calc(var(--bottom-nav-h) + .75rem); }
+    }
+    @media (max-width: 575.98px) {
+      .topbar { padding: .5rem .75rem; }
+      .page-content { padding: .65rem .65rem calc(var(--bottom-nav-h) + .5rem); }
+      h4.page-title { font-size: 1.1rem; }
+    }
+  </style>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<nav class="sidebar" id="sidebar">
+  <div class="brand text-center">
+    <div class="text-white fw-bold fs-6"><i class="bi bi-printer-fill me-2 text-info"></i>Grassato's 3D</div>
+    <div class="text-white-50" style="font-size:.7rem">Sistema de Gestão</div>
+  </div>
+  <ul class="nav flex-column mt-1 pb-4 flex-grow-1">
+    <li class="nav-item">
+      <a href="{% url 'dashboard:dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+        <i class="bi bi-speedometer2 me-2"></i>Dashboard
+      </a>
+    </li>
+    <div class="nav-section">Estoque</div>
+    <li class="nav-item">
+      <a href="{% url 'estoque:filamento_list' %}" class="nav-link {% if 'filamento' in request.resolver_match.url_name %}active{% endif %}">
+        <i class="bi bi-archive me-2"></i>Filamentos
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{% url 'estoque:produto_list' %}" class="nav-link {% if 'produto' in request.resolver_match.url_name %}active{% endif %}">
+        <i class="bi bi-box-seam me-2"></i>Produtos
+      </a>
+    </li>
+    <div class="nav-section">Financeiro</div>
+    <li class="nav-item">
+      <a href="{% url 'vendas:venda_list' %}" class="nav-link {% if request.resolver_match.app_name == 'vendas' %}active{% endif %}">
+        <i class="bi bi-cart3 me-2"></i>Vendas
+      </a>
+    </li>
+    <li class="nav-item">
+      <a href="{% url 'caixa:caixa_list' %}" class="nav-link {% if request.resolver_match.app_name == 'caixa' %}active{% endif %}">
+        <i class="bi bi-cash-coin me-2"></i>Caixa
+      </a>
+    </li>
+    <div class="nav-section">Relatórios</div>
+    <li class="nav-item">
+      <a href="{% url 'dashboard:balancete' %}" class="nav-link {% if request.resolver_match.url_name == 'balancete' %}active{% endif %}">
+        <i class="bi bi-file-earmark-bar-graph me-2"></i>Balancete
+      </a>
+    </li>
+    <div class="nav-section">Admin</div>
+    <li class="nav-item">
+      <a href="/admin/" class="nav-link" target="_blank">
+        <i class="bi bi-gear me-2"></i>Administração
+      </a>
+    </li>
+  </ul>
+</nav>
+
+<div class="main-content">
+  <div class="topbar">
+    <button class="btn btn-sm btn-light d-lg-none me-1" id="sidebarToggle" aria-label="Menu">
+      <i class="bi bi-list fs-5"></i>
+    </button>
+    <nav aria-label="breadcrumb" class="flex-grow-1">
+      <ol class="breadcrumb mb-0 small">
+        <li class="breadcrumb-item"><a href="{% url 'dashboard:dashboard' %}">Home</a></li>
+        {% block breadcrumb %}{% endblock %}
+      </ol>
+    </nav>
+    <span class="text-muted small d-none d-sm-inline">
+      <i class="bi bi-calendar3 me-1"></i>{% now "d/m/Y" %}
+    </span>
+  </div>
+
+  {% if messages %}
+  <div class="px-3 px-md-4 pt-3">
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show py-2 mb-2" role="alert">
+      <i class="bi bi-info-circle me-1"></i>{{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="page-content">
+    {% block content %}{% endblock %}
+  </div>
+</div>
+
+<nav class="bottom-nav d-lg-none">
+  <a href="{% url 'dashboard:dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+    <i class="bi bi-speedometer2"></i><span>Home</span>
+  </a>
+  <a href="{% url 'estoque:produto_list' %}" class="{% if 'produto' in request.resolver_match.url_name %}active{% endif %}">
+    <i class="bi bi-box-seam"></i><span>Produtos</span>
+  </a>
+  <a href="{% url 'vendas:venda_create' %}" class="{% if request.resolver_match.url_name == 'venda_create' %}active{% endif %}">
+    <i class="bi bi-plus-circle-fill" style="font-size:1.7rem;color:#0d6efd"></i><span>Venda</span>
+  </a>
+  <a href="{% url 'caixa:caixa_list' %}" class="{% if request.resolver_match.app_name == 'caixa' %}active{% endif %}">
+    <i class="bi bi-cash-coin"></i><span>Caixa</span>
+  </a>
+  <a href="{% url 'estoque:filamento_list' %}" class="{% if 'filamento' in request.resolver_match.url_name %}active{% endif %}">
+    <i class="bi bi-archive"></i><span>Estoque</span>
+  </a>
+</nav>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  const toggle  = document.getElementById('sidebarToggle');
+  const open  = () => { sidebar.classList.add('open');    overlay.classList.add('show'); }
+  const close = () => { sidebar.classList.remove('open'); overlay.classList.remove('show'); }
+  toggle?.addEventListener('click', () => sidebar.classList.contains('open') ? close() : open());
+  overlay.addEventListener('click', close);
+  sidebar.querySelectorAll('.nav-link').forEach(l => l.addEventListener('click', () => {
+    if (window.innerWidth < 992) close();
+  }));
+</script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

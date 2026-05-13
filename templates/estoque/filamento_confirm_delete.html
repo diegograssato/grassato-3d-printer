@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Excluir Filamento{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'estoque:filamento_list' %}">Filamentos</a></li>
+<li class="breadcrumb-item active">Excluir</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-4">
+  <div class="col-md-5">
+    <div class="card border-danger">
+      <div class="card-header bg-danger text-white py-3">
+        <h5 class="mb-0"><i class="bi bi-trash me-2"></i>Confirmar Exclusão</h5>
+      </div>
+      <div class="card-body p-4">
+        <p>Deseja excluir o filamento <strong>{{ objeto }}</strong>?</p>
+        <p class="text-muted small">Esta ação é irreversível. Se o filamento estiver vinculado a produtos, a exclusão será bloqueada.</p>
+        <form method="post" class="d-flex gap-2">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-trash me-1"></i>Sim, excluir
+          </button>
+          <a href="{% url 'estoque:filamento_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

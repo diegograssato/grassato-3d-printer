@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grassato-app
+  namespace: grassato-3d
+  labels:
+    app: grassato-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: grassato-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: grassato-app
+    spec:
+      # Init container: aguarda MySQL + executa migrate
+      initContainers:
+        - name: django-migrate
+          image: seu-registry/grassato-3d:latest   # substitua pela sua imagem
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          envFrom:
+            - configMapRef:
+                name: grassato-config
+            - secretRef:
+                name: grassato-secrets
+      containers:
+        - name: grassato-app
+          image: seu-registry/grassato-3d:latest   # substitua pela sua imagem
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: grassato-config
+            - secretRef:
+                name: grassato-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grassato-service
+  namespace: grassato-3d
+spec:
+  selector:
+    app: grassato-app
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+  type: ClusterIP
