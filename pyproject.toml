@@ -16,7 +16,17 @@ django-redis = "^5.4"
 
 [tool.poetry.group.dev.dependencies]
 django-debug-toolbar = "^4.3"
+black = "^26.3.1"
+flake8 = "^7.3.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.isort]
+profile = "black"
+
+[tool.flake8]
+max-line-length = 150
+extend-ignore = "E203, W503"
+exclude = [".venv", "migrations"]

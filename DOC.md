@@ -14,3 +14,6 @@ A sistema deve conter:
 - consumo de metragem
 - saldo de caixa
 - resumo financeiro
+
+Novas features no sistema:
+- crie um deploy no usando gihub actions, para gerar uma imagem docker da aplicação e que realiza o push no dockerhub, e valide a imagem antes
