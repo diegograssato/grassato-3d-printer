@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
 from django.db.models import Sum
 from decimal import Decimal
 from datetime import date
@@ -90,6 +91,7 @@ def dashboard(request):
     return render(request, 'dashboard/dashboard.html', context)
 
 
+@login_required
 def balancete(request):
     from caixa.models import MovimentacaoCaixa
     from vendas.models import Venda

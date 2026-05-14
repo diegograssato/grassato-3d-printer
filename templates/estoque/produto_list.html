@@ -18,6 +18,7 @@
     <table class="table table-hover mb-0 small align-middle">
       <thead class="table-dark">
         <tr>
+          <th class="text-muted small">SKU</th>
           <th>Nome</th>
           <th>Filamento</th>
           <th class="text-end">Peso/un (g)</th>
@@ -32,6 +33,7 @@
       <tbody>
         {% for p in produtos %}
         <tr>
+          <td class="text-muted small font-monospace">{{ p.sku }}</td>
           <td class="fw-semibold">{{ p.nome }}</td>
           <td>
             <span class="badge bg-secondary">{{ p.filamento.material }}</span>
@@ -54,6 +56,9 @@
           <td class="text-center text-nowrap">
             <a href="{% url 'estoque:produto_update' p.pk %}" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Editar">
               <i class="bi bi-pencil"></i>
+            </a>
+            <a href="{% url 'integracoes:produto_integracao_create' p.pk %}" class="btn btn-sm btn-outline-warning py-0 px-1 ms-1" title="Vincular a plataforma">
+              <i class="bi bi-broadcast"></i>
             </a>
             <a href="{% url 'estoque:produto_delete' p.pk %}" class="btn btn-sm btn-outline-danger py-0 px-1 ms-1" title="Desativar">
               <i class="bi bi-trash"></i>

@@ -1,0 +1,218 @@
+{% extends 'base.html' %}
+{% block title %}Vincular {{ produto.nome }} à Integração{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'integracoes:integracao_list' %}">Integrações</a></li>
+<li class="breadcrumb-item active">Vincular Produto</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+
+    {% if existentes %}
+    <div class="card mb-3">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-2"><i class="bi bi-link-45deg me-1 text-success"></i>Integrações ativas para este produto</h6>
+        {% for pi in existentes %}
+        <div class="d-flex align-items-center justify-content-between py-1">
+          <span class="small">{{ pi.integracao }} —
+            {% if pi.sku_externo %}<code>{{ pi.sku_externo }}</code>{% else %}sem SKU{% endif %}
+          </span>
+          <span class="badge {% if pi.status_externo == 'active' %}bg-success{% elif pi.status_externo == 'paused' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+            {{ pi.status_externo }}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0">
+          <i class="bi bi-broadcast me-2 text-primary"></i>
+          Publicar <strong>{{ produto.nome }}</strong>
+        </h5>
+        <div class="text-muted small mt-1">Estoque: {{ produto.estoque_quantidade }} un. | Preço: R$ {{ produto.preco_venda }}</div>
+      </div>
+      <div class="card-body">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Integração</label>
+            {{ form.integracao }}
+            {% if form.integracao.errors %}<div class="text-danger small mt-1">{{ form.integracao.errors }}</div>{% endif %}
+            {% if not form.integracao.field.queryset.exists %}
+            <div class="alert alert-warning py-2 small mt-2">
+              <i class="bi bi-exclamation-triangle me-1"></i>
+              Nenhuma integração ativa disponível.
+              <a href="{% url 'integracoes:integracao_create' %}">Cadastre uma agora</a>.
+            </div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3" id="categoria-ml-wrap">
+            <label class="form-label fw-semibold small">
+              Categoria ML
+              <a href="{% url 'integracoes:ml_categorias' %}" target="_blank"
+                 class="ms-1 text-muted small" title="Pesquisar categorias ML">
+                <i class="bi bi-search"></i> pesquisar
+              </a>
+            </label>
+            {{ form.categoria_ml }}
+            <div class="form-text">
+              Código da categoria do MercadoLivre. Ex.: <code>MLB268508</code> (Impressoras 3D).
+            </div>
+            {% if form.categoria_ml.errors %}<div class="text-danger small mt-1">{{ form.categoria_ml.errors }}</div>{% endif %}
+          </div>
+
+          <!-- Atributos obrigatórios (carregados via AJAX) -->
+          <div id="ml-attributes-container" class="mb-3 d-none">
+            <label class="form-label fw-semibold small">
+              <i class="bi bi-tag me-1 text-warning"></i>Atributos obrigatórios da categoria
+            </label>
+            <div id="ml-attributes-fields"></div>
+            <input type="hidden" name="ml_attributes_json" id="ml_attributes_json">
+          </div>
+          <div id="ml-attributes-loading" class="mb-2 d-none">
+            <span class="spinner-border spinner-border-sm text-warning me-1"></span>
+            <span class="small text-muted">Carregando atributos da categoria...</span>
+          </div>
+          <div id="ml-attributes-error" class="alert alert-warning small py-2 d-none mb-3">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            <span id="ml-attributes-error-msg"></span>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">
+              <i class="bi bi-images me-1 text-primary"></i>URLs das fotos
+            </label>
+            {{ form.picture_urls }}
+            <div class="form-text">{{ form.picture_urls.help_text }}</div>
+            {% if form.picture_urls.errors %}<div class="text-danger small mt-1">{{ form.picture_urls.errors }}</div>{% endif %}
+          </div>
+
+          <div class="alert alert-info small py-2">
+            <i class="bi bi-info-circle me-1"></i>
+            O anúncio será criado como <strong>Clássico</strong>, <strong>Ativo</strong>, com <strong>Frete Grátis</strong>.
+            O preço será R$ {{ produto.preco_venda }}.
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary" id="btn-publicar">
+              <i class="bi bi-broadcast me-1"></i>Publicar no MercadoLivre
+            </button>
+            <a href="{% url 'estoque:produto_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const catInput   = document.getElementById('id_categoria_ml');
+  const container  = document.getElementById('ml-attributes-container');
+  const fieldsDiv  = document.getElementById('ml-attributes-fields');
+  const hiddenJson = document.getElementById('ml_attributes_json');
+  const loading    = document.getElementById('ml-attributes-loading');
+  const errDiv     = document.getElementById('ml-attributes-error');
+  const errMsg     = document.getElementById('ml-attributes-error-msg');
+  const form       = catInput ? catInput.closest('form') : null;
+
+  let currentAttrs = [];
+
+  function collectAttrs() {
+    const out = {};
+    currentAttrs.forEach(a => {
+      const el = document.getElementById('ml_attr_' + a.id);
+      if (el) out[a.id] = el.value;
+    });
+    hiddenJson.value = JSON.stringify(out);
+  }
+
+  function renderAttrs(attrs) {
+    currentAttrs = attrs;
+    fieldsDiv.innerHTML = '';
+    if (!attrs.length) {
+      container.classList.add('d-none');
+      return;
+    }
+    attrs.forEach(a => {
+      const wrap = document.createElement('div');
+      wrap.className = 'mb-2';
+      const label = document.createElement('label');
+      label.className = 'form-label small fw-semibold mb-1';
+      label.textContent = a.name;
+      label.setAttribute('for', 'ml_attr_' + a.id);
+      wrap.appendChild(label);
+
+      let input;
+      if (a.values && a.values.length) {
+        input = document.createElement('select');
+        input.className = 'form-select form-select-sm';
+        const blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = '— selecione —';
+        input.appendChild(blank);
+        a.values.forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v;
+          opt.textContent = v;
+          input.appendChild(opt);
+        });
+      } else {
+        input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-control form-control-sm';
+        input.placeholder = a.name;
+      }
+      input.id = 'ml_attr_' + a.id;
+      input.name = 'ml_attr_' + a.id;
+      wrap.appendChild(input);
+      fieldsDiv.appendChild(wrap);
+    });
+    container.classList.remove('d-none');
+  }
+
+  async function fetchAttrs(catId) {
+    if (!catId) return;
+    loading.classList.remove('d-none');
+    errDiv.classList.add('d-none');
+    container.classList.add('d-none');
+    fieldsDiv.innerHTML = '';
+    try {
+      const url = "{% url 'integracoes:ml_category_attributes' %}?cat=" + encodeURIComponent(catId);
+      const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const data = await resp.json();
+      if (data.error) {
+        errMsg.textContent = data.error;
+        errDiv.classList.remove('d-none');
+      } else {
+        renderAttrs(data.attributes || []);
+      }
+    } catch (e) {
+      errMsg.textContent = 'Não foi possível carregar atributos da categoria.';
+      errDiv.classList.remove('d-none');
+    } finally {
+      loading.classList.add('d-none');
+    }
+  }
+
+  if (catInput) {
+    catInput.addEventListener('blur', () => fetchAttrs(catInput.value.trim()));
+    // Load on page open if field already has value (edit scenario)
+    if (catInput.value.trim()) fetchAttrs(catInput.value.trim());
+  }
+
+  if (form) {
+    form.addEventListener('submit', () => collectAttrs());
+  }
+})();
+</script>
+{% endblock %}

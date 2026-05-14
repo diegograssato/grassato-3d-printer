@@ -101,6 +101,10 @@ class Produto(models.Model):
         help_text='Quantidade de unidades em estoque'
     )
     ativo = models.BooleanField('Ativo', default=True)
+    sku = models.CharField(
+        'SKU', max_length=20, unique=True, blank=True, editable=False,
+        help_text='Gerado automaticamente no cadastro. Ex.: 3D-00001'
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -111,6 +115,13 @@ class Produto(models.Model):
 
     def __str__(self):
         return self.nome
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if not self.sku:
+            # Gera SKU após ter o PK (primeiro save)
+            self.sku = f'3D-{self.pk:05d}'
+            type(self).objects.filter(pk=self.pk).update(sku=self.sku)
 
     @property
     def margem_lucro_pct(self):

@@ -11,6 +11,11 @@ ALLOWED_HOSTS = config(
     default='localhost,127.0.0.1',
     cast=lambda v: [s.strip() for s in v.split(',')]
 )
+CSRF_TRUSTED_ORIGINS = config(
+    'CSRF_TRUSTED_ORIGINS',
+    default='http://localhost:8000,http://127.0.0.1:8000',
+    cast=lambda v: [s.strip() for s in v.split(',')]
+)
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -24,6 +29,7 @@ INSTALLED_APPS = [
     'vendas.apps.VendasConfig',
     'caixa.apps.CaixaConfig',
     'dashboard.apps.DashboardConfig',
+    'integracoes.apps.IntegracoesConfig',
 ]
 
 MIDDLEWARE = [
@@ -114,6 +120,11 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ── Autenticação ─────────────────────────────────────────────────────────────
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/accounts/login/'
 
 MESSAGE_TAGS = {
     msg_constants.DEBUG: 'secondary',

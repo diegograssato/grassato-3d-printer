@@ -1,11 +1,13 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.db.models import Sum
 from decimal import Decimal
 from .models import MovimentacaoCaixa
 from .forms import MovimentacaoCaixaForm
 
 
+@login_required
 def caixa_list(request):
     movimentacoes = MovimentacaoCaixa.objects.all()
 
@@ -43,6 +45,7 @@ def caixa_list(request):
     })
 
 
+@login_required
 def movimentacao_create(request):
     form = MovimentacaoCaixaForm(request.POST or None)
     if form.is_valid():
@@ -52,6 +55,7 @@ def movimentacao_create(request):
     return render(request, 'caixa/movimentacao_form.html', {'form': form})
 
 
+@login_required
 def movimentacao_delete(request, pk):
     mov = get_object_or_404(MovimentacaoCaixa, pk=pk, venda__isnull=True)
     if request.method == 'POST':

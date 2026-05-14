@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'integracoes:integracao_list' %}">Integrações</a></li>
+<li class="breadcrumb-item active">{{ titulo }}</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0"><i class="bi bi-plug-fill me-2 text-primary"></i>{{ titulo }}</h5>
+      </div>
+      <div class="card-body">
+
+        {% if not objeto %}
+        <div class="alert alert-info small py-2">
+          <i class="bi bi-info-circle me-1"></i>
+          Após salvar, você será redirecionado para autorizar o acesso à plataforma via OAuth.
+        </div>
+        {% endif %}
+
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Plataforma</label>
+            {{ form.plataforma }}
+            {% if form.plataforma.errors %}<div class="text-danger small mt-1">{{ form.plataforma.errors }}</div>{% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Nome / Apelido</label>
+            {{ form.nome }}
+            {% if form.nome.errors %}<div class="text-danger small mt-1">{{ form.nome.errors }}</div>{% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">App ID (Client ID)</label>
+            {{ form.client_id }}
+            <div class="form-text">Obtido no painel de desenvolvedores da plataforma.</div>
+            {% if form.client_id.errors %}<div class="text-danger small mt-1">{{ form.client_id.errors }}</div>{% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Client Secret</label>
+            {{ form.client_secret }}
+            <div class="form-text text-warning"><i class="bi bi-shield-lock me-1"></i>Nunca compartilhe este valor.</div>
+            {% if form.client_secret.errors %}<div class="text-danger small mt-1">{{ form.client_secret.errors }}</div>{% endif %}
+          </div>
+
+          <div class="mb-4 form-check">
+            {{ form.ativa }}
+            <label class="form-check-label small fw-semibold" for="{{ form.ativa.id_for_label }}">
+              Integração ativa
+            </label>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-check-lg me-1"></i>Salvar
+            </button>
+            <a href="{% url 'integracoes:integracao_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if not objeto %}
+    <div class="card mt-3">
+      <div class="card-body">
+        <h6 class="fw-bold"><i class="bi bi-question-circle me-1 text-info"></i>Como obter as credenciais do MercadoLivre?</h6>
+        <ol class="small mb-0 ps-3">
+          <li>Acesse <a href="https://developers.mercadolivre.com.br/" target="_blank" rel="noopener">developers.mercadolivre.com.br</a></li>
+          <li>Faça login com sua conta ML de vendedor</li>
+          <li>Crie um novo aplicativo → anote o <strong>App ID</strong> e o <strong>Secret Key</strong></li>
+          <li>Em "Redirect URIs", adicione: <code>{{ request.scheme }}://{{ request.get_host }}/integracoes/ml/callback/</code></li>
+          <li>Scope mínimo necessário: <code>read write offline_access</code></li>
+        </ol>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

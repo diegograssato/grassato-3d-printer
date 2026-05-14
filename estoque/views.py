@@ -1,5 +1,6 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from .models import Filamento, Produto
 from .forms import FilamentoForm, ProdutoForm
@@ -7,6 +8,7 @@ from .forms import FilamentoForm, ProdutoForm
 
 # ==================== Filamentos ====================
 
+@login_required
 def filamento_list(request):
     filamentos = Filamento.objects.all()
     return render(request, 'estoque/filamento_list.html', {'filamentos': filamentos})
@@ -35,6 +37,7 @@ def filamento_create(request):
     })
 
 
+@login_required
 def filamento_update(request, pk):
     filamento = get_object_or_404(Filamento, pk=pk)
     form = FilamentoForm(request.POST or None, instance=filamento)
@@ -49,6 +52,7 @@ def filamento_update(request, pk):
     })
 
 
+@login_required
 def filamento_delete(request, pk):
     filamento = get_object_or_404(Filamento, pk=pk)
     if request.method == 'POST':
@@ -63,6 +67,7 @@ def filamento_delete(request, pk):
 
 # ==================== Produtos ====================
 
+@login_required
 def produto_list(request):
     produtos = Produto.objects.select_related('filamento').filter(ativo=True)
     inativos = Produto.objects.filter(ativo=False).count()
@@ -72,6 +77,7 @@ def produto_list(request):
     })
 
 
+@login_required
 def produto_create(request):
     form = ProdutoForm(request.POST or None)
     if form.is_valid():
@@ -84,6 +90,7 @@ def produto_create(request):
     })
 
 
+@login_required
 def produto_update(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     form = ProdutoForm(request.POST or None, instance=produto)
@@ -98,6 +105,7 @@ def produto_update(request, pk):
     })
 
 
+@login_required
 def produto_delete(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     if request.method == 'POST':
@@ -108,6 +116,7 @@ def produto_delete(request, pk):
     return render(request, 'estoque/produto_confirm_delete.html', {'objeto': produto})
 
 
+@login_required
 def produto_preco_api(request, pk):
     """API interna: retorna preço de venda e estoque do produto (usado pelo form de venda)."""
     produto = get_object_or_404(Produto, pk=pk, ativo=True)
