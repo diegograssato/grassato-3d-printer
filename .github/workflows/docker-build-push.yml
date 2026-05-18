@@ -74,11 +74,12 @@ jobs:
       - name: Validate — HTTP smoke test
         run: |
           docker run -d --name grassato-ci \
-            -p 8000:8000 \
+            -p 8123:8123 \
             -e SECRET_KEY=ci-dummy-key-not-for-production \
             -e DB_ENGINE=sqlite3 \
             -e DB_NAME=/tmp/ci.sqlite3 \
             -e DEBUG=True \
+            -e GUNICORN_PORT=8123 \
             -e DJANGO_SUPERUSER_USERNAME=ci \
             -e DJANGO_SUPERUSER_EMAIL=ci@ci.local \
             -e DJANGO_SUPERUSER_PASSWORD=Ci@TestOnly123 \
@@ -86,7 +87,7 @@ jobs:
 
           echo "Aguardando container inicializar (máx 30s)..."
           for i in $(seq 1 15); do
-            if curl -sf http://localhost:8000/ > /dev/null 2>&1; then
+            if curl -sf http://localhost:8123/ > /dev/null 2>&1; then
               echo "✅ Container respondeu na tentativa $i"
               break
             fi
@@ -100,10 +101,10 @@ jobs:
           done
 
           # Verifica rotas principais
-          curl --fail --silent http://localhost:8000/          > /dev/null && echo "✅ GET /"
-          curl --fail --silent http://localhost:8000/vendas/   > /dev/null && echo "✅ GET /vendas/"
-          curl --fail --silent http://localhost:8000/caixa/    > /dev/null && echo "✅ GET /caixa/"
-          curl --fail --silent http://localhost:8000/balancete/ > /dev/null && echo "✅ GET /balancete/"
+          curl --fail --silent http://localhost:8123/          > /dev/null && echo "✅ GET /"
+          curl --fail --silent http://localhost:8123/vendas/   > /dev/null && echo "✅ GET /vendas/"
+          curl --fail --silent http://localhost:8123/caixa/    > /dev/null && echo "✅ GET /caixa/"
+          curl --fail --silent http://localhost:8123/balancete/ > /dev/null && echo "✅ GET /balancete/"
 
           docker stop grassato-ci && docker rm grassato-ci
 
