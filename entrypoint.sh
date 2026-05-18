@@ -1,11 +1,9 @@
 #!/bin/sh
 set -e
 
-# Create directory for static files
-mkdir -p /app/staticfiles
-
 echo "==> Applying database migrations..."
 python manage.py migrate --noinput
+echo "==> Collecting static files..."
 python manage.py collectstatic --noinput
 
 
