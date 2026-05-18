@@ -18,8 +18,8 @@ env:
 jobs:
   build-validate-push:
     name: Build · Validate · Push
-    runs-on: ubuntu-latest
-    #runs-on: self-hosted
+    #runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       # ── 1. Checkout ────────────────────────────────────────────────────
@@ -140,3 +140,38 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "🔗 https://hub.docker.com/r/${{ env.IMAGE }}" >> $GITHUB_STEP_SUMMARY
+
+      # ── 10. Deploy no Docker Swarm (somente fora de PR) ─────────────────
+      - name: Deploy to Docker Swarm
+        if: github.event_name != 'pull_request'
+        run: |
+          # 1. Recupera a tag SHA gerada pelo passo de metadados
+          SHA_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep -E 'sha-[0-9a-f]{7}$' | head -n 1)
+          
+          # Se não encontrar a tag SHA por algum motivo, usa a latest
+          if [ -z "$SHA_TAG" ]; then
+            SHA_TAG="${{ env.IMAGE }}:latest"
+          fi
+          
+          echo "🚀 Atualizando o Swarm com a imagem: $SHA_TAG"
+          
+          # 2. Atualiza o serviço específico dentro da stack "makers"
+          # Substitua 'web' pelo nome real do serviço definido no seu docker-compose.yml
+          docker service update \
+            --image "$SHA_TAG" \
+            --with-registry-auth \
+            makers_app        
+
+      # ── 11. Limpeza de discos no Runner ────────────────────────────────
+      - name: Cleanup old Docker images
+        if: always() # Garante que a limpeza execute mesmo se os passos anteriores falharem
+        run: |
+          echo "🧹 Iniciando a limpeza de dados antigos do Docker..."
+          
+          # Remove imagens sem tag e containers órfãos/parados
+          docker system prune -f
+          
+          # Opcional: Remove imagens antigas que não estão em uso por nenhum container local
+          # docker image prune -a -f --filter "until=168h"
+          
+          echo "✅ Limpeza concluída com sucesso."              

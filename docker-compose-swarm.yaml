@@ -1,21 +1,52 @@
 version: '3.8'
 
 services:
+  # ── Banco de Dados (MySQL) ────────────────────
+  database:
+    image: mariadb:10.11
+    environment:
+      MYSQL_DATABASE: "grassato-3d"
+      MYSQL_ROOT_PASSWORD: "anna"
+      MYSQL_USER: "diego"
+      MYSQL_PASSWORD: "anna"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - backend
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # ── Cache / Fila (Redis) ──────────────────────
+  redis:
+    image: redis:7-alpine
+    networks:
+      - backend
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
   # ── Django + Gunicorn ─────────────────────────
   app:
     image: diegograssato/grassato-3d-printer:latest
     environment:
       SECRET_KEY: "AsdkaoskoaAqeqwowqw3"
-      DEBUG: "False"
-      ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96"
-      CSRF_TRUSTED_ORIGINS: "http://localhost:8000,http://127.0.0.1:8000,http://10.22.0.96"
+      DEBUG: "True"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96,grassato-makers.duckdns.org"
+      CSRF_TRUSTED_ORIGINS: "http://grassato-makers.duckdns.org,https://grassato-makers.duckdns.org,http://10.22.0.96:8080,http://localhost,http://127.0.0.1"
+      USE_X_FORWARDED_HOST: "True"
+      HTTP_X_FORWARDED_PROTO: "http"
       DB_ENGINE: mysql
       DB_NAME: "grassato-3d"
-      DB_USER: "root"
+      DB_USER: "diego"
       DB_PASSWORD: "anna"
-      DB_HOST: "10.22.0.17"
+      DB_HOST: tasks.database
       DB_PORT: "3306"
-      REDIS_URL: redis://10.22.0.17:6379/0
+      REDIS_URL: "redis://redis:6379" # Alterado de IP para o nome do serviço
       GUNICORN_WORKERS: "3"
       GUNICORN_THREADS: "4"
       DJANGO_SUPERUSER_USERNAME: "admin"
@@ -31,9 +62,12 @@ services:
       - static_files:/app/staticfiles
     networks:
       - backend
+    depends_on:
+      - database
+      - redis
     deploy:
       mode: replicated
-      replicas: 2
+      replicas: 4
       restart_policy:
         condition: on-failure
 
@@ -42,37 +76,27 @@ services:
     image: diegograssato/nginx_app_web:latest
     ports:
       - target: 80
-        published: 80
-        mode: host
+        published: 8080
+        mode: ingress
     volumes:
       - static_files:/usr/share/nginx/html/static:ro 
     networks:
       - backend
+      - npm_public
     depends_on:
       - app
     deploy:
       mode: replicated
       replicas: 1
       restart_policy:
-        condition: on-failure
+        condition: on-failure  
 
-  visualizer:
-    image: dockersamples/visualizer:latest
-    ports:
-      - target: 8080
-        published: 8080
-        mode: host
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock"
-    deploy:
-      placement:
-        constraints: [node.role == manager]
-    networks:
-      - backend
 volumes:
   static_files:
- 
+  mysql_data:                   # Volume persistente para o banco de dados
 
 networks:
   backend:
-    external: true
+    external: true  
+  npm_public:
+    external: true    
