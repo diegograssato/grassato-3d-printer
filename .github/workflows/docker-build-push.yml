@@ -18,8 +18,7 @@ env:
 jobs:
   build-validate-push:
     name: Build · Validate · Push
-    #runs-on: ubuntu-latest
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
 
     steps:
       # ── 1. Checkout ────────────────────────────────────────────────────
