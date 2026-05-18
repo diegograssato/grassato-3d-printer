@@ -2,7 +2,7 @@
 set -e
 
 # Create directory for static files
-mkdir -p /app/staticfiles /app/media
+mkdir -p /app/staticfiles
 
 echo "==> Applying database migrations..."
 python manage.py migrate --noinput
