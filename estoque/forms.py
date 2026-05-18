@@ -1,5 +1,18 @@
 from django import forms
-from .models import Filamento, Produto
+from .models import Filamento, Produto, Fornecedor
+
+
+class FornecedorForm(forms.ModelForm):
+    class Meta:
+        model = Fornecedor
+        fields = ['nome', 'telefone', 'email', 'site', 'observacoes']
+        widgets = {
+            'nome': forms.TextInput(attrs={'class': 'form-control'}),
+            'telefone': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'site': forms.URLInput(attrs={'class': 'form-control'}),
+            'observacoes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
 
 
 class FilamentoForm(forms.ModelForm):
@@ -13,7 +26,7 @@ class FilamentoForm(forms.ModelForm):
             'peso_total_g': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
             'peso_disponivel_g': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
             'preco_por_kg': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
-            'fornecedor': forms.TextInput(attrs={'class': 'form-control'}),
+            'fornecedor': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):

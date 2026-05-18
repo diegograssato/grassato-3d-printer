@@ -34,6 +34,12 @@ class MovimentacaoCaixa(models.Model):
         related_name='movimentacao_caixa',
         verbose_name='Venda origem'
     )
+    fornecedor = models.ForeignKey(
+        'estoque.Fornecedor', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='movimentacoes_caixa',
+        verbose_name='Fornecedor',
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:

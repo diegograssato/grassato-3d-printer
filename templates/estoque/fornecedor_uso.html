@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Uso do Fornecedor{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'estoque:fornecedor_list' %}">Fornecedores</a></li>
+<li class="breadcrumb-item active">Uso de {{ fornecedor.nome }}</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-3 mt-3 mb-4">
+  <a href="{% url 'estoque:fornecedor_list' %}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Voltar
+  </a>
+  <h4 class="mb-0 fw-semibold">
+    <i class="bi bi-diagram-2 me-2 text-primary"></i>Onde é usado: <span class="text-primary">{{ fornecedor.nome }}</span>
+  </h4>
+</div>
+
+{% if not filamentos and not movimentacoes %}
+<div class="alert alert-info">
+  <i class="bi bi-info-circle me-2"></i>Este fornecedor não está vinculado a nenhum item ainda.
+</div>
+{% endif %}
+
+{% if filamentos %}
+<h5 class="fw-semibold mb-3"><i class="bi bi-archive me-2 text-secondary"></i>Filamentos</h5>
+<div class="card mb-4">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 small align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Material / Cor</th>
+          <th>Nome/Marca</th>
+          <th class="text-end">Peso Total</th>
+          <th class="text-end">Disponível</th>
+          <th class="text-center">Status</th>
+          <th class="text-center">Ir para</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fil in filamentos %}
+        <tr>
+          <td>
+            <span class="badge bg-secondary me-1">{{ fil.material }}</span>{{ fil.cor }}
+          </td>
+          <td class="fw-semibold">{{ fil.nome }}</td>
+          <td class="text-end">{{ fil.peso_total_g|floatformat:0 }} g</td>
+          <td class="text-end">{{ fil.peso_disponivel_g|floatformat:0 }} g</td>
+          <td class="text-center">
+            <span class="badge bg-{{ fil.status_estoque.0 }}">{{ fil.status_estoque.1 }}</span>
+          </td>
+          <td class="text-center">
+            <a href="{% url 'estoque:filamento_update' fil.pk %}" class="btn btn-sm btn-outline-primary py-0 px-2" title="Editar filamento">
+              <i class="bi bi-box-arrow-up-right"></i>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if movimentacoes %}
+<h5 class="fw-semibold mb-3"><i class="bi bi-cash-coin me-2 text-secondary"></i>Movimentações de Caixa</h5>
+<div class="card mb-4">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 small align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Data</th>
+          <th>Tipo</th>
+          <th>Categoria</th>
+          <th>Descrição</th>
+          <th class="text-end">Valor</th>
+          <th class="text-center">Ir para</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for mov in movimentacoes %}
+        <tr>
+          <td class="text-nowrap">{{ mov.data|date:"d/m/Y" }}</td>
+          <td>
+            <span class="badge {% if mov.tipo == 'ENTRADA' %}bg-success{% else %}bg-danger{% endif %}">
+              {{ mov.get_tipo_display }}
+            </span>
+          </td>
+          <td class="text-muted">{{ mov.get_categoria_display }}</td>
+          <td>{{ mov.descricao }}</td>
+          <td class="text-end fw-semibold {% if mov.tipo == 'ENTRADA' %}text-success{% else %}text-danger{% endif %}">
+            R$ {{ mov.valor|floatformat:2 }}
+          </td>
+          <td class="text-center">
+            <a href="{% url 'caixa:caixa_list' %}" class="btn btn-sm btn-outline-primary py-0 px-2" title="Ver caixa">
+              <i class="bi bi-box-arrow-up-right"></i>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -3,6 +3,23 @@ from django.core.validators import MinValueValidator
 from decimal import Decimal
 
 
+class Fornecedor(models.Model):
+    nome = models.CharField('Nome', max_length=150)
+    telefone = models.CharField('Telefone', max_length=20, blank=True)
+    email = models.EmailField('E-mail', blank=True)
+    site = models.URLField('Site', blank=True)
+    observacoes = models.TextField('Observações', blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Fornecedor'
+        verbose_name_plural = 'Fornecedores'
+        ordering = ['nome']
+
+    def __str__(self):
+        return self.nome
+
+
 MATERIAL_CHOICES = [
     ('PLA', 'PLA'),
     ('ABS', 'ABS'),
@@ -33,7 +50,12 @@ class Filamento(models.Model):
         'Preço por kg (R$)', max_digits=10, decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))]
     )
-    fornecedor = models.CharField('Fornecedor', max_length=100, blank=True)
+    fornecedor = models.ForeignKey(
+        'Fornecedor', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        verbose_name='Fornecedor',
+        related_name='filamentos',
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 

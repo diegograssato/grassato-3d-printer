@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Fornecedores{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Fornecedores</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+  <h4 class="mb-0 fw-semibold"><i class="bi bi-truck me-2 text-primary"></i>Fornecedores</h4>
+  <a href="{% url 'estoque:fornecedor_create' %}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>Novo Fornecedor
+  </a>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 small align-middle">
+      <thead class="table-dark">
+        <tr>
+          <th>Nome</th>
+          <th>Telefone</th>
+          <th>E-mail</th>
+          <th>Site</th>
+          <th class="text-center">Filamentos</th>
+          <th class="text-center">Caixa</th>
+          <th class="text-center">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in fornecedores %}
+        <tr>
+          <td class="fw-semibold">{{ f.nome }}</td>
+          <td class="text-muted">{{ f.telefone|default:"—" }}</td>
+          <td class="text-muted">
+            {% if f.email %}<a href="mailto:{{ f.email }}">{{ f.email }}</a>{% else %}—{% endif %}
+          </td>
+          <td class="text-muted">
+            {% if f.site %}<a href="{{ f.site }}" target="_blank" rel="noopener noreferrer">{{ f.site|truncatechars:30 }}</a>{% else %}—{% endif %}
+          </td>
+          <td class="text-center">
+            <span class="badge bg-secondary">{{ f.num_filamentos }}</span>
+          </td>
+          <td class="text-center">
+            <span class="badge bg-secondary">{{ f.num_caixa }}</span>
+          </td>
+          <td class="text-center text-nowrap">
+            <a href="{% url 'estoque:fornecedor_update' f.pk %}" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Editar">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <a href="{% url 'estoque:fornecedor_uso' f.pk %}" class="btn btn-sm btn-outline-info py-0 px-1 ms-1" title="Ver onde é utilizado">
+              <i class="bi bi-diagram-2"></i>
+            </a>
+            {% if not f.num_filamentos and not f.num_caixa %}
+            <a href="{% url 'estoque:fornecedor_delete' f.pk %}" class="btn btn-sm btn-outline-danger py-0 px-1 ms-1" title="Excluir">
+              <i class="bi bi-trash"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-sm btn-outline-secondary py-0 px-1 ms-1 disabled"
+                  title="Vinculado a {% if f.num_filamentos %}filamentos{% endif %}{% if f.num_filamentos and f.num_caixa %} e {% endif %}{% if f.num_caixa %}caixa{% endif %}">
+              <i class="bi bi-lock"></i>
+            </span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7" class="text-center text-muted py-4">
+            Nenhum fornecedor cadastrado. <a href="{% url 'estoque:fornecedor_create' %}">Cadastrar agora</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

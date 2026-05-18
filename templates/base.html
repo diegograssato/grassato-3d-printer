@@ -123,6 +123,11 @@
         <i class="bi bi-box-seam me-2"></i>Produtos
       </a>
     </li>
+    <li class="nav-item">
+      <a href="{% url 'estoque:fornecedor_list' %}" class="nav-link {% if 'fornecedor' in request.resolver_match.url_name %}active{% endif %}">
+        <i class="bi bi-truck me-2"></i>Fornecedores
+      </a>
+    </li>
     <div class="nav-section">Financeiro</div>
     <li class="nav-item">
       <a href="{% url 'vendas:venda_list' %}" class="nav-link {% if request.resolver_match.app_name == 'vendas' %}active{% endif %}">

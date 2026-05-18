@@ -56,7 +56,8 @@ services:
     environment:
       SECRET_KEY: ${SECRET_KEY:-insecure-key-change-me}
       DEBUG: "False"
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,10.22.0.96}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:8000,http://10.22.0.96}
       DB_ENGINE: mysql
       DB_NAME: ${DB_NAME:-grassato3d}
       DB_USER: ${DB_USER:-grassato}

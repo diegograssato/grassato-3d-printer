@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Excluir Fornecedor{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'estoque:fornecedor_list' %}">Fornecedores</a></li>
+<li class="breadcrumb-item active">Excluir</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-3">
+  <div class="col-12 col-md-6 col-lg-5">
+    <div class="card p-4 text-center">
+      <i class="bi bi-exclamation-triangle-fill text-danger fs-1 mb-3"></i>
+      <h5 class="fw-semibold mb-2">Confirmar Exclusão</h5>
+      <p class="text-muted mb-4">
+        Tem certeza que deseja excluir o fornecedor <strong>{{ objeto.nome }}</strong>?
+        Esta ação não pode ser desfeita.
+      </p>
+      <form method="post" class="d-flex gap-2 justify-content-center">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">
+          <i class="bi bi-trash me-1"></i>Excluir
+        </button>
+        <a href="{% url 'estoque:fornecedor_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

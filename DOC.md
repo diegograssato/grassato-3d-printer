@@ -16,4 +16,7 @@ A sistema deve conter:
 - resumo financeiro
 
 Novas features no sistema:
-- crie um deploy no usando gihub actions, para gerar uma imagem docker da aplicação e que realiza o push no dockerhub, e valide a imagem antes
+- Do lado da opção de deletar Fornecedor:
+ - Adicionar um icone de utilização, ao clicar mostrar em uma pagina onde está sendo utilizado o Fornecedor(caixa, ou filamentto), com link para apontando para item.
+- Do lado da opção de deletar Filamento:
+ - Adicionar um icone de utilização, ao clicar mostrar em uma pagina onde está sendo utilizado o filamento, com link para apontando para o produto.

@@ -2,15 +2,18 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
-from .models import Filamento, Produto
-from .forms import FilamentoForm, ProdutoForm
+from django.db.models import Count, Q
+from .models import Filamento, Produto, Fornecedor
+from .forms import FilamentoForm, ProdutoForm, FornecedorForm
 
 
 # ==================== Filamentos ====================
 
 @login_required
 def filamento_list(request):
-    filamentos = Filamento.objects.all()
+    filamentos = Filamento.objects.select_related('fornecedor').annotate(
+        num_produtos=Count('produtos', filter=Q(produtos__ativo=True))
+    )
     return render(request, 'estoque/filamento_list.html', {'filamentos': filamentos})
 
 
@@ -125,4 +128,83 @@ def produto_preco_api(request, pk):
         'estoque': produto.estoque_quantidade,
         'filamento_disponivel_g': str(produto.filamento.peso_disponivel_g),
         'peso_filamento_g': str(produto.peso_filamento_g),
+    })
+
+
+# ==================== Fornecedores ====================
+
+@login_required
+def fornecedor_list(request):
+    fornecedores = Fornecedor.objects.annotate(
+        num_filamentos=Count('filamentos'),
+        num_caixa=Count('movimentacoes_caixa'),
+    )
+    return render(request, 'estoque/fornecedor_list.html', {'fornecedores': fornecedores})
+
+
+@login_required
+def fornecedor_create(request):
+    form = FornecedorForm(request.POST or None)
+    if form.is_valid():
+        form.save()
+        messages.success(request, 'Fornecedor cadastrado com sucesso!')
+        return redirect('estoque:fornecedor_list')
+    return render(request, 'estoque/fornecedor_form.html', {
+        'form': form,
+        'titulo': 'Novo Fornecedor',
+    })
+
+
+@login_required
+def fornecedor_update(request, pk):
+    fornecedor = get_object_or_404(Fornecedor, pk=pk)
+    form = FornecedorForm(request.POST or None, instance=fornecedor)
+    if form.is_valid():
+        form.save()
+        messages.success(request, 'Fornecedor atualizado com sucesso!')
+        return redirect('estoque:fornecedor_list')
+    return render(request, 'estoque/fornecedor_form.html', {
+        'form': form,
+        'titulo': 'Editar Fornecedor',
+        'objeto': fornecedor,
+    })
+
+
+@login_required
+def fornecedor_delete(request, pk):
+    fornecedor = get_object_or_404(Fornecedor, pk=pk)
+    if request.method == 'POST':
+        if fornecedor.filamentos.exists():
+            messages.error(request, 'Não é possível excluir: fornecedor vinculado a filamentos.')
+            return redirect('estoque:fornecedor_list')
+        if fornecedor.movimentacoes_caixa.exists():
+            messages.error(request, 'Não é possível excluir: fornecedor vinculado a movimentações de caixa.')
+            return redirect('estoque:fornecedor_list')
+        fornecedor.delete()
+        messages.success(request, 'Fornecedor excluído com sucesso!')
+        return redirect('estoque:fornecedor_list')
+    return render(request, 'estoque/fornecedor_confirm_delete.html', {'objeto': fornecedor})
+
+
+@login_required
+def fornecedor_uso(request, pk):
+    fornecedor = get_object_or_404(Fornecedor, pk=pk)
+    filamentos = fornecedor.filamentos.all()
+    movimentacoes = fornecedor.movimentacoes_caixa.order_by('-data', '-criado_em')
+    return render(request, 'estoque/fornecedor_uso.html', {
+        'fornecedor': fornecedor,
+        'filamentos': filamentos,
+        'movimentacoes': movimentacoes,
+    })
+
+
+@login_required
+def filamento_uso(request, pk):
+    filamento = get_object_or_404(Filamento, pk=pk)
+    produtos = filamento.produtos.filter(ativo=True).order_by('nome')
+    inativos = filamento.produtos.filter(ativo=False).order_by('nome')
+    return render(request, 'estoque/filamento_uso.html', {
+        'filamento': filamento,
+        'produtos': produtos,
+        'inativos': inativos,
     })

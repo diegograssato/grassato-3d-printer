@@ -19,6 +19,7 @@ jobs:
   build-validate-push:
     name: Build · Validate · Push
     runs-on: ubuntu-latest
+    #runs-on: self-hosted
 
     steps:
       # ── 1. Checkout ────────────────────────────────────────────────────

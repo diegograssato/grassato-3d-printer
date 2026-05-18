@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # ── Django + Gunicorn ─────────────────────────
+  app:
+    image: diegograssato/grassato-3d-printer:latest
+    environment:
+      SECRET_KEY: "AsdkaoskoaAqeqwowqw3"
+      DEBUG: "False"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96"
+      CSRF_TRUSTED_ORIGINS: "http://localhost:8000,http://127.0.0.1:8000,http://10.22.0.96"
+      DB_ENGINE: mysql
+      DB_NAME: "grassato-3d"
+      DB_USER: "root"
+      DB_PASSWORD: "anna"
+      DB_HOST: "10.22.0.17"
+      DB_PORT: "3306"
+      REDIS_URL: redis://10.22.0.17:6379/0
+      GUNICORN_WORKERS: "3"
+      GUNICORN_THREADS: "4"
+      DJANGO_SUPERUSER_USERNAME: "admin"
+      DJANGO_SUPERUSER_EMAIL: "diego.grassato@gmail.com"
+      DJANGO_SUPERUSER_PASSWORD: "admin123"
+    ports:
+      - target: 8000
+        published: 8000
+        mode: ingress
+    expose:
+      - 8000
+    volumes:
+      - static_files:/app/staticfiles
+    networks:
+      - backend
+    deploy:
+      mode: replicated
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+
+  # ── Nginx (proxy reverso + static files) ─────
+  nginx:
+    image: diegograssato/nginx_app_web:latest
+    ports:
+      - target: 80
+        published: 80
+        mode: host
+    volumes:
+      - static_files:/usr/share/nginx/html/static:ro 
+    networks:
+      - backend
+    depends_on:
+      - app
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  visualizer:
+    image: dockersamples/visualizer:latest
+    ports:
+      - target: 8080
+        published: 8080
+        mode: host
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+    networks:
+      - backend
+volumes:
+  static_files:
+ 
+
+networks:
+  backend:
+    external: true

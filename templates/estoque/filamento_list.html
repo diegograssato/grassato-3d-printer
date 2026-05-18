@@ -36,7 +36,7 @@
             {{ f.cor }}
           </td>
           <td>{{ f.nome }}</td>
-          <td class="text-muted">{{ f.fornecedor|default:"—" }}</td>
+          <td class="text-muted">{{ f.fornecedor.nome|default:"—" }}</td>
           <td class="text-end">{{ f.peso_total_g|floatformat:0 }} g</td>
           <td>
             <div class="d-flex align-items-center gap-2">
@@ -55,9 +55,18 @@
             <a href="{% url 'estoque:filamento_update' f.pk %}" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Editar">
               <i class="bi bi-pencil"></i>
             </a>
+            <a href="{% url 'estoque:filamento_uso' f.pk %}" class="btn btn-sm btn-outline-info py-0 px-1 ms-1" title="Ver onde é utilizado">
+              <i class="bi bi-diagram-2"></i>
+            </a>
+            {% if not f.num_produtos %}
             <a href="{% url 'estoque:filamento_delete' f.pk %}" class="btn btn-sm btn-outline-danger py-0 px-1 ms-1" title="Excluir">
               <i class="bi bi-trash"></i>
             </a>
+            {% else %}
+            <span class="btn btn-sm btn-outline-secondary py-0 px-1 ms-1 disabled" title="{{ f.num_produtos }} produto(s) vinculado(s)">
+              <i class="bi bi-lock"></i>
+            </span>
+            {% endif %}
           </td>
         </tr>
         {% empty %}
