@@ -36,9 +36,9 @@ services:
     environment:
       SECRET_KEY: "AsdkaoskoaAqeqwowqw3"
       DEBUG: "True"
-      ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96,grassato-makers.duckdns.org"
-      CSRF_TRUSTED_ORIGINS: "http://grassato-makers.duckdns.org,https://grassato-makers.duckdns.org,http://10.22.0.96:8080,http://localhost,http://127.0.0.1"
-      ML_CALLBACK_URI: "http://grassato-makers.duckdns.org/integracoes/ml/callback/"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,grassato-makers.duckdns.org"
+      CSRF_TRUSTED_ORIGINS: "http://grassato-makers.duckdns.org,https://grassato-makers.duckdns.org,http://localhost,http://127.0.0.1"
+      ML_CALLBACK_URI: "https://grassato-makers.duckdns.org/integracoes/ml/callback/"
       USE_X_FORWARDED_HOST: "True"
       HTTP_X_FORWARDED_PROTO: "http"
       DB_ENGINE: mysql
@@ -64,14 +64,12 @@ services:
       - media_files:/app/media
     networks:
       - backend
-    depends_on:
-      database:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    depends_on: 
+      - database
+      - redis
     deploy:
       mode: replicated
-      replicas: 4
+      replicas: 2
       restart_policy:
         condition: on-failure
 
@@ -89,8 +87,7 @@ services:
       - backend
       - npm_public
     depends_on:
-      app:
-        condition: service_healthy
+      - app
     deploy:
       mode: replicated
       replicas: 1
@@ -99,16 +96,11 @@ services:
 
   # ── Celery Worker ─────────────────────────────────────────────────────────
   celery:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: grassato-celery
+    image: diegograssato/grassato-3d-printer:latest
     restart: unless-stopped
     depends_on:
-      database:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - database
+      - redis
     command: >
       celery -A config worker
       --loglevel=debug
@@ -117,10 +109,10 @@ services:
       --hostname=celery@%h
     environment:
      SECRET_KEY: "AsdkaoskoaAqeqwowqw3"
-     DEBUG: "True"
-     ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96,grassato-makers.duckdns.org"
-     CSRF_TRUSTED_ORIGINS: "http://grassato-makers.duckdns.org,https://grassato-makers.duckdns.org,http://10.22.0.96:8080,http://localhost,http://127.0.0.1"
-     ML_CALLBACK_URI: "http://grassato-makers.duckdns.org/integracoes/ml/callback/"
+     DEBUG: "False"
+     ALLOWED_HOSTS: "localhost,127.0.0.1,grassato-makers.duckdns.org"
+     CSRF_TRUSTED_ORIGINS: "http://grassato-makers.duckdns.org,https://grassato-makers.duckdns.org,http://localhost,http://127.0.0.1"
+     ML_CALLBACK_URI: "https://grassato-makers.duckdns.org/integracoes/ml/callback/"
      USE_X_FORWARDED_HOST: "True"
      HTTP_X_FORWARDED_PROTO: "http"
      DB_ENGINE: mysql
@@ -145,10 +137,7 @@ services:
 
   # ── Celery Flower (Monitoramento Web) ─────────────────────────────────────
   flower:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: grassato-flower
+    image: diegograssato/grassato-3d-printer:latest
     restart: unless-stopped
     command: >
       celery -A config flower
@@ -160,13 +149,11 @@ services:
     ports:
       - target: 5555
         published: 5555
-        mode: ingress      
+        mode: host      
     depends_on:
-      redis:
-        condition: service_healthy
+      - redis
     networks:
       - backend
-      - frontend
 
 volumes:
   static_files:
@@ -178,3 +165,9 @@ networks:
     external: true  
   npm_public:
     external: true    
+
+
+
+
+
+
