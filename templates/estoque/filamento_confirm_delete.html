@@ -8,7 +8,69 @@
 
 {% block content %}
 <div class="row justify-content-center mt-4">
-  <div class="col-md-5">
+  <div class="col-md-{% if is_admin and num_produtos > 0 %}9{% else %}5{% endif %}">
+
+    {% if is_admin and num_produtos > 0 %}
+    <!-- Administrador com vínculos: duas opções -->
+    <h5 class="fw-semibold mb-3"><i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>O que deseja fazer com <strong>{{ objeto }}</strong>?</h5>
+    <div class="row g-3">
+
+      <!-- Opção 1: Exclusão normal (bloqueada) -->
+      <div class="col-md-6">
+        <div class="card border-secondary h-100">
+          <div class="card-header bg-secondary text-white py-2">
+            <h6 class="mb-0"><i class="bi bi-x-circle me-1"></i>Excluir (bloqueado)</h6>
+          </div>
+          <div class="card-body d-flex flex-column">
+            <p class="small text-muted mb-3">
+              Este filamento está vinculado a <strong>{{ num_produtos }} produto(s)</strong>.
+              A exclusão simples é bloqueada para proteger os dados.
+            </p>
+            <form method="post" class="mt-auto">
+              {% csrf_token %}
+              <input type="hidden" name="acao" value="excluir">
+              <button type="submit" class="btn btn-secondary w-100" disabled>
+                <i class="bi bi-lock me-1"></i>Excluir (indisponível)
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Opção 2: Forçar exclusão em cascata -->
+      <div class="col-md-6">
+        <div class="card border-danger h-100">
+          <div class="card-header bg-danger text-white py-2">
+            <h6 class="mb-0"><i class="bi bi-trash me-1"></i>Forçar exclusão em cascata</h6>
+          </div>
+          <div class="card-body d-flex flex-column">
+            <p class="small mb-2">Remove o filamento e <strong>todos os itens vinculados</strong>:</p>
+            <ul class="small text-danger mb-3">
+              <li><strong>{{ num_produtos }} produto(s)</strong> vinculado(s)</li>
+              <li>Todas as vendas desses produtos</li>
+              <li>Todos os lançamentos de caixa dessas vendas</li>
+            </ul>
+            <p class="small text-muted mb-3">Ação <strong>irreversível</strong>. Use com cautela.</p>
+            <form method="post" class="mt-auto">
+              {% csrf_token %}
+              <input type="hidden" name="acao" value="force">
+              <button type="submit" class="btn btn-danger w-100">
+                <i class="bi bi-trash me-1"></i>Sim, forçar exclusão
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="mt-3">
+      <a href="{% url 'estoque:filamento_list' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Cancelar
+      </a>
+    </div>
+
+    {% else %}
+    <!-- Sem vínculos ou usuário normal: exclusão simples -->
     <div class="card border-danger">
       <div class="card-header bg-danger text-white py-3">
         <h5 class="mb-0"><i class="bi bi-trash me-2"></i>Confirmar Exclusão</h5>
@@ -18,6 +80,7 @@
         <p class="text-muted small">Esta ação é irreversível. Se o filamento estiver vinculado a produtos, a exclusão será bloqueada.</p>
         <form method="post" class="d-flex gap-2">
           {% csrf_token %}
+          <input type="hidden" name="acao" value="excluir">
           <button type="submit" class="btn btn-danger">
             <i class="bi bi-trash me-1"></i>Sim, excluir
           </button>
@@ -25,6 +88,8 @@
         </form>
       </div>
     </div>
+    {% endif %}
+
   </div>
 </div>
 {% endblock %}

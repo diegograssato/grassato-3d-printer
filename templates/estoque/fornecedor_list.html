@@ -72,8 +72,9 @@
             <a href="{% url 'estoque:fornecedor_uso' f.pk %}" class="btn btn-sm btn-outline-info py-0 px-1 ms-1" title="Ver onde é utilizado">
               <i class="bi bi-diagram-2"></i>
             </a>
-            {% if not f.num_filamentos and not f.num_caixa %}
-            <a href="{% url 'estoque:fornecedor_delete' f.pk %}" class="btn btn-sm btn-outline-danger py-0 px-1 ms-1" title="Excluir">
+            {% if not f.num_filamentos and not f.num_caixa or is_admin_group %}
+            <a href="{% url 'estoque:fornecedor_delete' f.pk %}" class="btn btn-sm btn-outline-danger py-0 px-1 ms-1"
+               title="{% if f.num_filamentos or f.num_caixa %}Excluir (vínculos serão desfeitos){% else %}Excluir{% endif %}">
               <i class="bi bi-trash"></i>
             </a>
             {% else %}

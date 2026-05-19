@@ -127,8 +127,9 @@
             {% if m.tipo == 'ENTRADA' %}+{% else %}−{% endif %}R$ {{ m.valor|floatformat:2 }}
           </td>
           <td class="text-center">
-            {% if not m.venda %}
-            <a href="{% url 'caixa:movimentacao_delete' m.pk %}" class="btn btn-sm btn-outline-danger py-0 px-1" title="Excluir">
+            {% if not m.venda or is_admin_group %}
+            <a href="{% url 'caixa:movimentacao_delete' m.pk %}" class="btn btn-sm btn-outline-danger py-0 px-1"
+               title="{% if m.venda %}Excluir (também exclui a venda vinculada){% else %}Excluir{% endif %}">
               <i class="bi bi-trash"></i>
             </a>
             {% else %}

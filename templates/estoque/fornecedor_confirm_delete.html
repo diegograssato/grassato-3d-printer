@@ -12,15 +12,43 @@
     <div class="card p-4 text-center">
       <i class="bi bi-exclamation-triangle-fill text-danger fs-1 mb-3"></i>
       <h5 class="fw-semibold mb-2">Confirmar Exclusão</h5>
-      <p class="text-muted mb-4">
+      <p class="text-muted mb-2">
         Tem certeza que deseja excluir o fornecedor <strong>{{ objeto.nome }}</strong>?
         Esta ação não pode ser desfeita.
       </p>
+
+      {% if is_admin %}
+        {% if num_filamentos > 0 or num_caixa > 0 %}
+        <div class="alert alert-info text-start small mb-3 py-2">
+          <i class="bi bi-info-circle me-1"></i>
+          Este fornecedor está vinculado a
+          {% if num_filamentos > 0 %}<strong>{{ num_filamentos }} filamento(s)</strong>{% endif %}
+          {% if num_filamentos > 0 and num_caixa > 0 %} e {% endif %}
+          {% if num_caixa > 0 %}<strong>{{ num_caixa }} movimentação(ões) de caixa</strong>{% endif %}.
+          Os vínculos serão <strong>desfeitos</strong> (os registros não serão excluídos, apenas ficarão sem fornecedor).
+        </div>
+        {% endif %}
+      {% else %}
+        {% if num_filamentos > 0 or num_caixa > 0 %}
+        <div class="alert alert-warning text-start small mb-3 py-2">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          Fornecedor vinculado a registros — exclusão bloqueada para usuários sem permissão de administrador.
+        </div>
+        {% endif %}
+      {% endif %}
+
       <form method="post" class="d-flex gap-2 justify-content-center">
         {% csrf_token %}
-        <button type="submit" class="btn btn-danger">
-          <i class="bi bi-trash me-1"></i>Excluir
-        </button>
+        {% if is_admin %}
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-trash me-1"></i>Excluir
+          </button>
+        {% else %}
+          <button type="submit" class="btn btn-danger"
+            {% if num_filamentos > 0 or num_caixa > 0 %}disabled{% endif %}>
+            <i class="bi bi-trash me-1"></i>Excluir
+          </button>
+        {% endif %}
         <a href="{% url 'estoque:fornecedor_list' %}" class="btn btn-outline-secondary">Cancelar</a>
       </form>
     </div>

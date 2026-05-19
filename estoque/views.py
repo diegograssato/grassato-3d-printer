@@ -127,14 +127,30 @@ def filamento_update(request, pk):
 @login_required
 def filamento_delete(request, pk):
     filamento = get_object_or_404(Filamento, pk=pk)
+    is_admin = _is_admin(request)
     if request.method == 'POST':
-        try:
+        acao = request.POST.get('acao', 'excluir')
+        if acao == 'force' and is_admin:
+            nome = str(filamento)
+            # Cascata manual: remove vendas → produtos → filamento
+            for produto in filamento.produtos.all():
+                produto.vendas.all().delete()
+                produto.delete()
             filamento.delete()
-            messages.success(request, 'Filamento excluído com sucesso!')
-        except Exception:
-            messages.error(request, 'Não é possível excluir: filamento vinculado a produtos.')
+            messages.success(request, f'Filamento "{nome}" e todos os itens vinculados excluídos permanentemente.')
+        else:
+            try:
+                filamento.delete()
+                messages.success(request, 'Filamento excluído com sucesso!')
+            except Exception:
+                messages.error(request, 'Não é possível excluir: filamento vinculado a produtos. Use a opção de exclusão forçada.')
         return redirect('estoque:filamento_list')
-    return render(request, 'estoque/filamento_confirm_delete.html', {'objeto': filamento})
+    num_produtos = filamento.produtos.count()
+    return render(request, 'estoque/filamento_confirm_delete.html', {
+        'objeto': filamento,
+        'is_admin': is_admin,
+        'num_produtos': num_produtos,
+    })
 
 
 # ==================== Produtos ====================
@@ -215,12 +231,25 @@ def produto_update(request, pk):
 @login_required
 def produto_delete(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
+    is_admin = _is_admin(request)
     if request.method == 'POST':
-        produto.ativo = False
-        produto.save()
-        messages.success(request, 'Produto desativado com sucesso!')
+        acao = request.POST.get('acao', 'desativar')
+        if acao == 'excluir' and is_admin:
+            nome = str(produto)
+            # Remove vendas vinculadas (cascade limpa MovimentacaoCaixa via OneToOne CASCADE)
+            produto.vendas.all().delete()
+            produto.delete()
+            messages.success(request, f'Produto "{nome}" excluído permanentemente.')
+        else:
+            produto.ativo = False
+            produto.save()
+            messages.success(request, 'Produto desativado com sucesso!')
         return redirect('estoque:produto_list')
-    return render(request, 'estoque/produto_confirm_delete.html', {'objeto': produto})
+    return render(request, 'estoque/produto_confirm_delete.html', {
+        'objeto': produto,
+        'is_admin': is_admin,
+        'num_vendas': produto.vendas.count(),
+    })
 
 
 @login_required
@@ -309,17 +338,29 @@ def fornecedor_update(request, pk):
 @login_required
 def fornecedor_delete(request, pk):
     fornecedor = get_object_or_404(Fornecedor, pk=pk)
+    is_admin = _is_admin(request)
     if request.method == 'POST':
-        if fornecedor.filamentos.exists():
-            messages.error(request, 'Não é possível excluir: fornecedor vinculado a filamentos.')
-            return redirect('estoque:fornecedor_list')
-        if fornecedor.movimentacoes_caixa.exists():
-            messages.error(request, 'Não é possível excluir: fornecedor vinculado a movimentações de caixa.')
-            return redirect('estoque:fornecedor_list')
-        fornecedor.delete()
-        messages.success(request, 'Fornecedor excluído com sucesso!')
+        if is_admin:
+            # FK é SET_NULL em filamentos e caixa — deleção segura, sem cascata destrutiva
+            nome = str(fornecedor)
+            fornecedor.delete()
+            messages.success(request, f'Fornecedor "{nome}" excluído com sucesso.')
+        else:
+            if fornecedor.filamentos.exists():
+                messages.error(request, 'Não é possível excluir: fornecedor vinculado a filamentos.')
+                return redirect('estoque:fornecedor_list')
+            if fornecedor.movimentacoes_caixa.exists():
+                messages.error(request, 'Não é possível excluir: fornecedor vinculado a movimentações de caixa.')
+                return redirect('estoque:fornecedor_list')
+            fornecedor.delete()
+            messages.success(request, 'Fornecedor excluído com sucesso!')
         return redirect('estoque:fornecedor_list')
-    return render(request, 'estoque/fornecedor_confirm_delete.html', {'objeto': fornecedor})
+    return render(request, 'estoque/fornecedor_confirm_delete.html', {
+        'objeto': fornecedor,
+        'is_admin': is_admin,
+        'num_filamentos': fornecedor.filamentos.count(),
+        'num_caixa': fornecedor.movimentacoes_caixa.count(),
+    })
 
 
 @login_required

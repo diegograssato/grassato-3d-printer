@@ -93,11 +93,31 @@ def movimentacao_create(request):
     return render(request, 'caixa/movimentacao_form.html', {'form': form})
 
 
+def _is_admin(request):
+    return (
+        request.user.is_superuser
+        or request.user.groups.filter(name='Administradores').exists()
+    )
+
+
 @login_required
 def movimentacao_delete(request, pk):
-    mov = get_object_or_404(MovimentacaoCaixa, pk=pk, venda__isnull=True)
+    is_admin = _is_admin(request)
+    # Administradores podem excluir qualquer movimentação, inclusive as geradas por vendas
+    if is_admin:
+        mov = get_object_or_404(MovimentacaoCaixa, pk=pk)
+    else:
+        mov = get_object_or_404(MovimentacaoCaixa, pk=pk, venda__isnull=True)
     if request.method == 'POST':
-        mov.delete()
-        messages.success(request, 'Movimentação excluída com sucesso!')
+        if mov.venda:
+            # Exclui a venda; CASCADE remove esta movimentação automaticamente
+            mov.venda.delete()
+            messages.success(request, 'Venda e movimentação de caixa excluídas com sucesso.')
+        else:
+            mov.delete()
+            messages.success(request, 'Movimentação excluída com sucesso!')
         return redirect('caixa:caixa_list')
-    return render(request, 'caixa/movimentacao_confirm_delete.html', {'objeto': mov})
+    return render(request, 'caixa/movimentacao_confirm_delete.html', {
+        'objeto': mov,
+        'venda_vinculada': mov.venda,
+    })
