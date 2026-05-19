@@ -14,6 +14,9 @@ concurrency:
 
 env:
   IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/grassato-3d-printer
+  # Cache em disco local — self-hosted persiste entre runs; muito mais rápido
+  # que type=gha (sem overhead de rede nem rate-limit do GitHub)
+  BUILDX_CACHE: /tmp/buildx-cache
 
 jobs:
   build-validate-push:
@@ -26,7 +29,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # ── 2. Buildx (suporte multi-arch e cache) ─────────────────────────
+      # ── 2. Buildx ──────────────────────────────────────────────────────
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -47,15 +50,24 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-,format=short
 
-      # ── 4. Build local (sem push) para validação ───────────────────────
-      - name: Build image (local)
+      # ── 4. Build ÚNICO (load local + cache em disco) ───────────────────
+      # A imagem é construída UMA SÓ VEZ aqui.
+      # Validação e push reutilizam essa imagem — sem segundo build.
+      # Cache local em disco evita re-download de camadas entre runs.
+      - name: Build image
         uses: docker/build-push-action@v7
         with:
           context: .
-          load: true                      # carrega no docker local
+          load: true                         # carrega no daemon local para validação
           tags: grassato-3d:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=local,src=${{ env.BUILDX_CACHE }}
+          cache-to: type=local,dest=${{ env.BUILDX_CACHE }}-new,mode=max
+
+      # Rotaciona o cache (evita crescimento ilimitado do diretório)
+      - name: Rotate build cache
+        run: |
+          rm -rf ${{ env.BUILDX_CACHE }}
+          mv ${{ env.BUILDX_CACHE }}-new ${{ env.BUILDX_CACHE }}
 
       # ── 5. Validação: Django system check ─────────────────────────────
       - name: Validate — Django system check
@@ -84,7 +96,7 @@ jobs:
       #       -e DJANGO_SUPERUSER_EMAIL=ci@ci.local \
       #       -e DJANGO_SUPERUSER_PASSWORD=Ci@TestOnly123 \
       #       grassato-3d:ci
-
+      #
       #     echo "Aguardando container inicializar (máx 30s)..."
       #     for i in $(seq 1 20); do
       #       if curl -sf http://localhost:8123/ > /dev/null 2>&1; then
@@ -99,13 +111,12 @@ jobs:
       #       fi
       #       sleep 2
       #     done
-
-      #     # Verifica rotas principais
+      #
       #     curl --fail --silent http://localhost:8123/          > /dev/null && echo "✅ GET /"
       #     curl --fail --silent http://localhost:8123/vendas/   > /dev/null && echo "✅ GET /vendas/"
       #     curl --fail --silent http://localhost:8123/caixa/    > /dev/null && echo "✅ GET /caixa/"
       #     curl --fail --silent http://localhost:8123/balancete/ > /dev/null && echo "✅ GET /balancete/"
-
+      #
       #     docker stop grassato-ci && docker rm grassato-ci
 
       # ── 7. Login Docker Hub (somente fora de PR) ───────────────────────
@@ -116,18 +127,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # ── 8. Build multi-arch + Push (somente fora de PR) ───────────────
-      - name: Build & Push (linux/amd64 + linux/arm64)
+      # ── 8. Tag & Push (reutiliza a imagem já construída — sem rebuild) ──
+      # docker push apenas transfere as camadas já presentes no daemon local.
+      # Elimina o segundo build que existia antes (economiza 5–10 min).
+      - name: Tag & Push
         if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: |
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            docker tag grassato-3d:ci "$tag"
+            docker push "$tag"
+            echo "✅ Pushed: $tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
 
       # ── 9. Resumo no GitHub Actions summary ───────────────────────────
       - name: Summary
@@ -146,17 +157,11 @@ jobs:
       - name: Deploy to Docker Swarm
         if: github.event_name != 'pull_request'
         run: |
-          # 1. Recupera a tag SHA gerada pelo passo de metadados
           SHA_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep -E 'sha-[0-9a-f]{7}$' | head -n 1)
-          
-          # Se não encontrar a tag SHA por algum motivo, usa a latest
           if [ -z "$SHA_TAG" ]; then
             SHA_TAG="${{ env.IMAGE }}:latest"
           fi
-          
           echo "🚀 Atualizando o Swarm com a imagem: $SHA_TAG"
-
-          # 2. Atualiza todos os serviços da stack em loop
           FAILED=0
           for srv in makers_app makers_celery makers_flower; do
             echo "  → atualizando $srv ..."
@@ -170,23 +175,15 @@ jobs:
               FAILED=$((FAILED + 1))
             fi
           done
-
           if [ "$FAILED" -gt 0 ]; then
             echo "❌ $FAILED serviço(s) falharam na atualização."
             exit 1
           fi
           echo "✅ Todos os serviços atualizados com sucesso."
 
-      # ── 11. Limpeza de discos no Runner ────────────────────────────────
+      # ── 11. Limpeza de disco no Runner ─────────────────────────────────
       - name: Cleanup old Docker images
-        if: always() # Garante que a limpeza execute mesmo se os passos anteriores falharem
+        if: always()
         run: |
-          echo "🧹 Iniciando a limpeza de dados antigos do Docker..."
-          
-          # Remove imagens sem tag e containers órfãos/parados
           docker system prune -f
-          
-          # Opcional: Remove imagens antigas que não estão em uso por nenhum container local
-          # docker image prune -a -f --filter "until=168h"
-          
-          echo "✅ Limpeza concluída com sucesso."              
+          echo "✅ Limpeza concluída."

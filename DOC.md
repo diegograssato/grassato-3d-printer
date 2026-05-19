@@ -15,11 +15,12 @@ A sistema deve conter:
 - saldo de caixa
 - resumo financeiro
 
-Ajuste em features no sistema:
--  Ao cadastrar um produto no MercadoLivre, as imagens estão indo para processamento, preciso que o produto já entre validado, algumas alternativas:
- - Garanta que as imagens estão sendo enviadas para o MercadoLivre.
- - Envie no máximo 10 fotos no formato JPG, JPEG, PNG o WEBP
- - Certifique-se de que cada uma tenha mais de 500 pixels em um dos lados e até 10 MB
- - Use o tamanho recomendado de 1200 x 1200 pixels.
-
- 
+Nova feature no sistema:
+- Em Filamentos, Produtos e Fornecedores, ouvesse filtros e paginação(range de 10, 20, 50, 100,500,100)
+- Em Filamentos, Produtos e Fornecedores, todos do grupo "Administradores" consigam filtrar por produtos itens ativos e inativos, com a possbilidade de ativar um item inativo
+- Em Caixa e Vendas paginação(range de 10, 20, 50, 100,500,100)
+- Em  Vendas consiga filtrar por tipo de venda, forma de pagaamento, também.
+- Em  Caixa consiga filtrar por tipo(Entrada, Saida), categoria, fornecedor.
+- Em Balancete paginação(range de 10, 20, 50, 100,500,100)
+- Em Balancete filtro por range de data, por padrão deixar o range para incido de Janeiro do ano atual e fim Dezembro do ano atual.
+- Em Auditoria paginação(range de 10, 20, 50, 100,500,100)
