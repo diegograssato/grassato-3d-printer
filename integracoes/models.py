@@ -91,3 +91,33 @@ class ProdutoIntegracao(models.Model):
 
     def __str__(self):
         return f'{self.produto} → {self.integracao} ({self.sku_externo or "sem SKU"})'
+
+
+def _imagem_upload_path(instance, filename):
+    """Salva em integracoes/imagens/<produto_integracao_pk>/<filename>."""
+    import os
+    ext = os.path.splitext(filename)[1].lower()
+    import uuid
+    return f'integracoes/imagens/{instance.produto_integracao_id}/{uuid.uuid4().hex}{ext}'
+
+
+class ImagemProdutoIntegracao(models.Model):
+    """Imagens de um anúncio — armazenadas localmente e servidas via URL pública."""
+
+    produto_integracao = models.ForeignKey(
+        ProdutoIntegracao, on_delete=models.CASCADE,
+        related_name='imagens', verbose_name='Produto-Integração'
+    )
+    imagem = models.ImageField('Imagem', upload_to=_imagem_upload_path)
+    is_capa = models.BooleanField('Capa (1ª foto)', default=False)
+    ordem = models.PositiveSmallIntegerField('Ordem', default=0)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Imagem de Anúncio'
+        verbose_name_plural = 'Imagens de Anúncio'
+        ordering = ['ordem', 'criado_em']
+
+    def __str__(self):
+        label = 'capa' if self.is_capa else f'foto {self.ordem}'
+        return f'{self.produto_integracao} — {label}'

@@ -1,5 +1,7 @@
 import json
 import logging
+import sys
+from io import BytesIO
 
 from decouple import config as env_config
 from django.contrib import messages
@@ -8,13 +10,68 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
 
 from .forms import IntegracaoForm, ProdutoIntegracaoForm
 from .models import Integracao, ProdutoIntegracao
 from .services.mercadolivre import MercadoLivreService
 
 logger = logging.getLogger(__name__)
+
+
+def _processar_imagem_ml(arquivo):
+    """
+    Processa a imagem para garantir compatibilidade com os requisitos do ML:
+    - Converte para modo RGB (remove canal alfa de PNG/WEBP)
+    - Redimensiona para no máximo 1200×1200px preservando proporção
+    - Converte para JPEG com qualidade 85 e metadados EXIF removidos
+    Retorna um InMemoryUploadedFile pronto para salvar no model.
+    Lança ValueError se a imagem não puder ser processada.
+    """
+    from PIL import Image, UnidentifiedImageError
+    from django.core.files.uploadedfile import InMemoryUploadedFile
+
+    MAX_DIM = 1200
+
+    try:
+        arquivo.seek(0)
+        img = Image.open(arquivo)
+        img.load()
+    except (UnidentifiedImageError, Exception) as exc:
+        raise ValueError(f'Não foi possível processar "{arquivo.name}": {exc}')
+
+    # Remove EXIF/metadados abrindo sem eles
+    data = list(img.getdata())
+    clean = Image.new(img.mode, img.size)
+    clean.putdata(data)
+    img = clean
+
+    # Garante modo RGB (fundo branco para transparências)
+    if img.mode in ('RGBA', 'LA', 'P'):
+        if img.mode == 'P':
+            img = img.convert('RGBA')
+        bg = Image.new('RGB', img.size, (255, 255, 255))
+        bg.paste(img, mask=img.split()[-1])
+        img = bg
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+
+    # Redimensiona se maior que 1200×1200 (mantém proporção)
+    w, h = img.size
+    if w > MAX_DIM or h > MAX_DIM:
+        img.thumbnail((MAX_DIM, MAX_DIM), Image.LANCZOS)
+
+    # Salva como JPEG
+    output = BytesIO()
+    img.save(output, format='JPEG', quality=85, optimize=True)
+    size = output.tell()
+    output.seek(0)
+
+    nome_base = arquivo.name.rsplit('.', 1)[0]
+    return InMemoryUploadedFile(
+        output, 'ImageField', f'{nome_base}.jpg', 'image/jpeg', size, None
+    )
+
+
 ml_service = MercadoLivreService()
 
 
@@ -90,10 +147,12 @@ def ml_authorize(request, pk):
 
 
 def ml_callback(request):
-    """Callback OAuth: troca o code pelo access_token.
+    """Callback OAuth: enfileira a troca do code pelo access_token via Celery.
     Sem @login_required pois o ML redireciona sem manter a sessão Django.
     A segurança é garantida pelo parâmetro `state` (pk da integração).
     """
+    from .tasks import processar_oauth_ml
+
     code = request.GET.get('code', '').strip()
     pk = request.GET.get('state', '').strip()
 
@@ -106,18 +165,38 @@ def ml_callback(request):
     # O redirect_uri deve ser IDÊNTICO ao cadastrado no painel de desenvolvedores ML
     redirect_uri = _ml_redirect_uri(request)
 
-    ok, error_msg = ml_service.exchange_code(integracao, code, redirect_uri)
+    # Enfileira a troca do código na fila ml_oauth — resposta imediata ao usuário
+    # Em dev (DEBUG=True / CELERY_TASK_ALWAYS_EAGER=True) executa inline com feedback imediato
+    result = processar_oauth_ml.apply_async(
+        args=[integracao.pk, code, redirect_uri],
+        queue='ml_oauth',
+    )
+    logger.info(
+        'ml_callback: task processar_oauth_ml enfileirada para integracao_pk=%s',
+        integracao.pk,
+    )
 
-    if ok:
-        messages.success(
-            request,
-            f'MercadoLivre autorizado com sucesso! Seller ID: {integracao.ml_user_id}'
-        )
+    from django.conf import settings as dj_settings
+    if getattr(dj_settings, 'CELERY_TASK_ALWAYS_EAGER', False):
+        # Resultado disponível inline em dev — mostra feedback real ao usuário
+        outcome = result.get()
+        if outcome.get('ok'):
+            integracao.refresh_from_db()
+            messages.success(
+                request,
+                f'MercadoLivre autorizado com sucesso! Seller ID: {integracao.ml_user_id}'
+            )
+        else:
+            messages.error(
+                request,
+                f'Falha ao autorizar com o MercadoLivre: {outcome.get("error")} '
+                f'— verifique se o Redirect URI cadastrado no ML é exatamente: {redirect_uri}'
+            )
     else:
-        messages.error(
+        messages.info(
             request,
-            f'Falha ao autorizar com o MercadoLivre: {error_msg} '
-            f'— verifique se o Redirect URI cadastrado no ML é exatamente: {redirect_uri}'
+            'Autorização com o MercadoLivre em processamento. '
+            'Aguarde alguns segundos e atualize a página para confirmar.'
         )
     return redirect('integracoes:integracao_list')
 
@@ -126,17 +205,20 @@ def ml_callback(request):
 
 @login_required
 def produto_integracao_create(request, produto_pk):
-    """Vincula um produto a uma integração e publica o anúncio."""
+    """Vincula um produto a uma integração, salva imagens e publica o anúncio."""
     from estoque.models import Produto
     produto = get_object_or_404(Produto, pk=produto_pk)
     existentes = ProdutoIntegracao.objects.filter(produto=produto).select_related('integracao')
 
-    form = ProdutoIntegracaoForm(request.POST or None, produto=produto)
+    form = ProdutoIntegracaoForm(
+        request.POST or None,
+        request.FILES or None,
+        produto=produto,
+    )
     if form.is_valid():
         pi = form.save(commit=False)
         pi.produto = produto
 
-        # Persiste atributos enviados pelo formulário dinâmico
         attrs_raw = request.POST.get('ml_attributes_json', '').strip()
         if attrs_raw:
             pi.ml_attributes_json = attrs_raw
@@ -151,21 +233,70 @@ def produto_integracao_create(request, produto_pk):
                 return render(request, 'integracoes/produto_integracao_form.html', {
                     'form': form, 'produto': produto, 'existentes': existentes
                 })
+
+            # Salva pi primeiro para ter PK e poder vincular as imagens
+            pi.save()
+
+            # Processa e persiste imagens, constrói picture_urls com URLs públicas
+            from .models import ImagemProdutoIntegracao
+            from django.conf import settings as dj_settings
+            arquivos = form.cleaned_data.get('imagens') or []
+            picture_urls_list = []
+            erros_imagem = []
+
+            for idx, arquivo in enumerate(arquivos):
+                try:
+                    arquivo_processado = _processar_imagem_ml(arquivo)
+                except ValueError as exc:
+                    erros_imagem.append(str(exc))
+                    continue
+
+                img_obj = ImagemProdutoIntegracao.objects.create(
+                    produto_integracao=pi,
+                    imagem=arquivo_processado,
+                    is_capa=(idx == 0),
+                    ordem=idx,
+                )
+                site_url = getattr(dj_settings, 'SITE_URL', '').rstrip('/')
+                picture_urls_list.append(f'{site_url}{img_obj.imagem.url}')
+                logger.info(
+                    'Imagem ML salva: %s (capa=%s) → %s',
+                    img_obj.imagem.name, idx == 0, img_obj.imagem.url,
+                )
+
+            if erros_imagem:
+                pi.delete()
+                for erro in erros_imagem:
+                    messages.error(request, erro)
+                return render(request, 'integracoes/produto_integracao_form.html', {
+                    'form': form, 'produto': produto, 'existentes': existentes
+                })
+
+            if len(picture_urls_list) < 2:
+                pi.delete()
+                messages.error(
+                    request,
+                    'Não foi possível processar as imagens. Verifique os arquivos e tente novamente.'
+                )
+                return render(request, 'integracoes/produto_integracao_form.html', {
+                    'form': form, 'produto': produto, 'existentes': existentes
+                })
+
+            pi.picture_urls = '\n'.join(picture_urls_list)
+            pi.save(update_fields=['picture_urls'])
+
             resultado, error_msg = ml_service.create_listing(integracao, pi)
             if resultado:
                 pi.sku_externo = resultado['id']
                 pi.status_externo = resultado.get('status', 'active')
                 pi.sincronizado_em = timezone.now()
-                pi.save()
+                pi.save(update_fields=['sku_externo', 'status_externo', 'sincronizado_em'])
                 messages.success(
                     request,
                     f'Produto publicado no MercadoLivre! ID do anúncio: {pi.sku_externo}'
                 )
             else:
-                messages.error(
-                    request,
-                    f'Erro ao publicar no MercadoLivre: {error_msg}'
-                )
+                messages.error(request, f'Erro ao publicar no MercadoLivre: {error_msg}')
                 return render(request, 'integracoes/produto_integracao_form.html', {
                     'form': form, 'produto': produto, 'existentes': existentes
                 })
@@ -217,11 +348,18 @@ def produto_integracao_sync(request, pk):
 
 @login_required
 def produto_integracao_delete(request, pk):
-    """Remove o vínculo (não desativa o anúncio)."""
+    """Remove o vínculo e pausa o anúncio no MercadoLivre (via signal pre_delete)."""
     pi = get_object_or_404(ProdutoIntegracao, pk=pk)
     if request.method == 'POST':
+        sku = pi.sku_externo or ''
         pi.delete()
-        messages.success(request, 'Vínculo com a integração removido.')
+        if sku:
+            messages.success(
+                request,
+                f'Vínculo removido e anúncio {sku} pausado no MercadoLivre.'
+            )
+        else:
+            messages.success(request, 'Vínculo com a integração removido.')
         return redirect('integracoes:integracao_list')
     return render(request, 'integracoes/produto_integracao_confirm_delete.html', {'pi': pi})
 
@@ -254,6 +392,27 @@ def ml_category_attributes(request):
             })
 
     return JsonResponse({'attributes': required, 'category_id': category_id})
+
+
+@login_required
+def ml_categorias_busca_json(request):
+    """
+    AJAX: busca categorias ML por termo e retorna JSON para o modal de seleção.
+    GET ?q=impressora+3d
+    """
+    term = request.GET.get('q', '').strip()
+    if not term or len(term) < 2:
+        return JsonResponse({'results': [], 'error': 'Digite ao menos 2 caracteres.'})
+
+    resultados = ml_service.search_categories(term)
+    return JsonResponse({'results': [
+        {
+            'id': r.get('category_id', ''),
+            'name': r.get('category_name', ''),
+            'domain': r.get('domain_name', ''),
+        }
+        for r in resultados
+    ]})
 
 
 @login_required
@@ -297,17 +456,31 @@ def ml_categorias(request):
 # ── Webhook MercadoLivre ──────────────────────────────────────────────────────
 
 @csrf_exempt
-@require_POST
 def ml_notificacao(request):
     """
     Endpoint público para receber notificações do MercadoLivre (IPN/Webhook).
     URL deve ser registrada no painel de developers do ML.
-    Retorna 200 imediatamente (ML exige resposta em < 500ms).
+
+    GET  → retorna 200 para validação da URL pelo painel de developers do ML.
+    POST → enfileira o processamento via Celery (resposta em < 500ms).
     """
+    # ML envia GET ao salvar a URL no painel — basta confirmar que o endpoint existe
+    if request.method == 'GET':
+        return HttpResponse(status=200)
+
+    if request.method != 'POST':
+        return HttpResponse(status=405)
+
+    from .tasks import processar_pedido_ml, processar_status_ml
+
     try:
         data = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
-        return HttpResponse(status=400)
+        # Alguns clientes do ML enviam form-encoded — tenta fallback
+        data = request.POST.dict()
+
+    if not data:
+        return HttpResponse(status=200)
 
     topic = data.get('topic', '')
     resource = data.get('resource', '')
@@ -315,64 +488,40 @@ def ml_notificacao(request):
 
     logger.info('ML notification: topic=%s resource=%s user_id=%s', topic, resource, user_id)
 
-    # Só processa notificações de pedidos
-    if topic not in ('orders_v2', 'orders'):
-        return HttpResponse(status=200)
-
     try:
         integracao = Integracao.objects.get(ml_user_id=user_id, plataforma='ML', ativa=True)
     except Integracao.DoesNotExist:
         logger.warning('ML notification: nenhuma integração para user_id=%s', user_id)
         return HttpResponse(status=200)
 
-    # Extrai o order_id do resource (/orders/1234567890)
-    try:
-        order_id = resource.strip('/').split('/')[-1]
-    except (AttributeError, IndexError):
-        return HttpResponse(status=200)
-
-    _process_ml_order(integracao, order_id)
-    return HttpResponse(status=200)
-
-
-def _process_ml_order(integracao, order_id: str) -> None:
-    """Processa um pedido do ML: cria Venda + baixa estoque + lança no caixa."""
-    order = ml_service.get_order(integracao, order_id)
-    if not order:
-        return
-
-    # Só processa pedidos pagos
-    if order.get('status') not in ('paid', 'payment_required'):
-        logger.info('ML order %s status=%s — ignorado', order_id, order.get('status'))
-        return
-
-    from decimal import Decimal
-    from vendas.models import Venda
-
-    for order_item in order.get('order_items', []):
-        item_id = order_item.get('item', {}).get('id', '')
-        quantity = int(order_item.get('quantity', 1))
-        unit_price = Decimal(str(order_item.get('unit_price', 0)))
-
+    if topic in ('orders_v2', 'orders'):
         try:
-            pi = ProdutoIntegracao.objects.select_related('produto').get(
-                sku_externo=item_id, integracao=integracao
-            )
-        except ProdutoIntegracao.DoesNotExist:
-            logger.warning('ML order %s: item %s não encontrado no sistema', order_id, item_id)
-            continue
+            order_id = resource.strip('/').split('/')[-1]
+        except (AttributeError, IndexError):
+            return HttpResponse(status=200)
 
-        # Cria a Venda — o signal vendas.signals.venda_post_save cuida do
-        # caixa, do estoque e da sincronização de volta ao ML
-        Venda.objects.create(
-            produto=pi.produto,
-            quantidade=quantity,
-            preco_unitario=unit_price,
-            data=timezone.now().date(),
-            forma_pagamento='CARTAO_CREDITO',
-            observacoes=f'Venda via MercadoLivre — pedido #{order_id}',
+        processar_pedido_ml.apply_async(
+            args=[integracao.pk, order_id],
+            queue='ml_orders',
         )
         logger.info(
-            'ML venda registrada: produto=%s qtd=%d order=%s',
-            pi.produto, quantity, order_id
+            'ml_notificacao: task processar_pedido_ml enfileirada — order_id=%s integracao=%s',
+            order_id,
+            integracao.pk,
         )
+
+    elif topic in ('items', 'item_status', 'item_price'):
+        processar_status_ml.apply_async(
+            args=[integracao.pk, topic, resource],
+            queue='ml_status',
+        )
+        logger.info(
+            'ml_notificacao: task processar_status_ml enfileirada — resource=%s integracao=%s',
+            resource,
+            integracao.pk,
+        )
+
+    else:
+        logger.info('ml_notificacao: topic=%s ignorado', topic)
+
+    return HttpResponse(status=200)

@@ -122,7 +122,12 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
+# URL base pública usada para gerar links absolutos das imagens (ex.: para o ML)
+# Em dev usa a URL do ngrok; em prod usa o domínio real.
+SITE_URL = config('SITE_URL', default='http://localhost:8000').rstrip('/')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ── Autenticação ─────────────────────────────────────────────────────────────
@@ -137,3 +142,33 @@ MESSAGE_TAGS = {
     msg_constants.WARNING: 'warning',
     msg_constants.ERROR: 'danger',
 }
+
+# ── Celery ────────────────────────────────────────────────────────────────────
+_celery_broker = config('CELERY_BROKER_URL', default='redis://localhost:6379/1')
+_celery_backend = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/1')
+
+CELERY_BROKER_URL = _celery_broker
+CELERY_RESULT_BACKEND = _celery_backend
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 300        # 5 min — hard limit por task
+CELERY_TASK_SOFT_TIME_LIMIT = 240   # 4 min — raise SoftTimeLimitExceeded antes do hard limit
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # evita starvation de filas lentas
+
+# Em DEBUG=True (dev local) executa tasks inline sem broker/Redis
+if DEBUG:
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True   # exceções das tasks sobem normalmente
+    CELERY_RESULT_BACKEND = 'cache+memory://'  # sem Redis em dev
+
+# Roteamento de filas por domínio
+CELERY_TASK_ROUTES = {
+    'integracoes.tasks.processar_oauth_ml': {'queue': 'ml_oauth'},
+    'integracoes.tasks.processar_pedido_ml': {'queue': 'ml_orders'},
+    'integracoes.tasks.processar_status_ml': {'queue': 'ml_status'},
+}
+
+CELERY_TASK_DEFAULT_QUEUE = 'default'

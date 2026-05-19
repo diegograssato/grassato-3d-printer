@@ -6,6 +6,88 @@
 <li class="breadcrumb-item active">Vincular Produto</li>
 {% endblock %}
 
+{% block extra_css %}
+<style>
+/* ── ML-style image upload ── */
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+.photo-slot {
+  position: relative;
+  aspect-ratio: 1;
+  border: 2px dashed #ced4da;
+  border-radius: 8px;
+  background: #f8f9fa;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+  overflow: hidden;
+  user-select: none;
+}
+.photo-slot:hover, .photo-slot.dragover {
+  border-color: #0d6efd;
+  background: #e8f0fe;
+}
+.photo-slot.cover-slot {
+  border-color: #0d6efd;
+  background: #e8f0fe;
+}
+.photo-slot .slot-label {
+  font-size: .72rem;
+  font-weight: 600;
+  color: #6c757d;
+  margin-top: 6px;
+  text-align: center;
+}
+.photo-slot .cover-badge {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: rgba(13,110,253,.85);
+  color: #fff;
+  font-size: .68rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 2px 0;
+  letter-spacing: .04em;
+}
+.photo-slot img.preview {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+  position: absolute;
+  top: 0; left: 0;
+}
+.photo-slot .remove-btn {
+  display: none;
+  position: absolute;
+  top: 4px; right: 4px;
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 22px; height: 22px;
+  font-size: .7rem;
+  line-height: 22px;
+  text-align: center;
+  cursor: pointer;
+  padding: 0;
+  z-index: 2;
+}
+.photo-slot:hover .remove-btn,
+.photo-slot .remove-btn:focus { display: block; }
+.photo-slot .add-icon {
+  font-size: 1.8rem;
+  color: #adb5bd;
+  line-height: 1;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-lg-7">
@@ -37,9 +119,10 @@
         <div class="text-muted small mt-1">Estoque: {{ produto.estoque_quantidade }} un. | Preço: R$ {{ produto.preco_venda }}</div>
       </div>
       <div class="card-body">
-        <form method="post" novalidate>
+        <form method="post" enctype="multipart/form-data" novalidate id="pi-form">
           {% csrf_token %}
 
+          <!-- Integração -->
           <div class="mb-3">
             <label class="form-label fw-semibold small">Integração</label>
             {{ form.integracao }}
@@ -53,22 +136,25 @@
             {% endif %}
           </div>
 
+          <!-- Categoria ML -->
           <div class="mb-3" id="categoria-ml-wrap">
-            <label class="form-label fw-semibold small">
-              Categoria ML
-              <a href="{% url 'integracoes:ml_categorias' %}" target="_blank"
-                 class="ms-1 text-muted small" title="Pesquisar categorias ML">
-                <i class="bi bi-search"></i> pesquisar
-              </a>
-            </label>
-            {{ form.categoria_ml }}
-            <div class="form-text">
-              Código da categoria do MercadoLivre. Ex.: <code>MLB268508</code> (Impressoras 3D).
+            <label class="form-label fw-semibold small">Categoria ML</label>
+            <div class="input-group">
+              {{ form.categoria_ml }}
+              <button type="button" class="btn btn-outline-warning" id="btn-buscar-categoria"
+                      data-bs-toggle="modal" data-bs-target="#modalCategoriasML" title="Pesquisar categoria">
+                <i class="bi bi-search me-1"></i>Pesquisar
+              </button>
             </div>
+            <div id="categoria-selecionada" class="d-none mt-1 d-flex align-items-center gap-1">
+              <i class="bi bi-check-circle-fill text-success small"></i>
+              <span id="categoria-selecionada-nome" class="small text-success fw-semibold"></span>
+            </div>
+            <div class="form-text">Código da categoria do MercadoLivre. Ex.: <code>MLB268508</code> (Impressoras 3D).</div>
             {% if form.categoria_ml.errors %}<div class="text-danger small mt-1">{{ form.categoria_ml.errors }}</div>{% endif %}
           </div>
 
-          <!-- Atributos obrigatórios (carregados via AJAX) -->
+          <!-- Atributos obrigatórios (AJAX) -->
           <div id="ml-attributes-container" class="mb-3 d-none">
             <label class="form-label fw-semibold small">
               <i class="bi bi-tag me-1 text-warning"></i>Atributos obrigatórios da categoria
@@ -85,13 +171,37 @@
             <span id="ml-attributes-error-msg"></span>
           </div>
 
-          <div class="mb-3">
-            <label class="form-label fw-semibold small">
-              <i class="bi bi-images me-1 text-primary"></i>URLs das fotos
+          <!-- ── Upload de fotos estilo ML ── -->
+          <div class="mb-4">
+            <label class="form-label fw-semibold small d-flex align-items-center gap-2">
+              <i class="bi bi-images text-primary"></i>
+              Fotos do anúncio
+              <span class="badge bg-danger ms-1" id="photos-count-badge">0 / mín. 2</span>
             </label>
-            {{ form.picture_urls }}
-            <div class="form-text">{{ form.picture_urls.help_text }}</div>
-            {% if form.picture_urls.errors %}<div class="text-danger small mt-1">{{ form.picture_urls.errors }}</div>{% endif %}
+            <p class="text-muted small mb-2">
+              A primeira foto será a <strong>capa</strong> do anúncio. Adicione no mínimo <strong>2 fotos</strong>.
+              Arraste para reordenar.
+            </p>
+
+            <!-- Input oculto (gerenciado via JS com DataTransfer) -->
+            {{ form.imagens }}
+
+            <!-- Grid de slots -->
+            <div class="photo-grid" id="photo-grid">
+              <!-- Slots placeholder e botão "+" são injetados pelo JS -->
+              <div class="photo-slot" id="slot-add-more" title="Adicionar mais fotos">
+                <span class="add-icon"><i class="bi bi-plus-lg text-muted"></i></span>
+                <span class="slot-label text-muted">Adicionar<br>foto</span>
+              </div>
+            </div>
+
+            <div id="photos-error" class="text-danger small mt-2 d-none">
+              <i class="bi bi-exclamation-circle me-1"></i>
+              Envie pelo menos 2 fotos: uma de capa e uma adicional.
+            </div>
+            {% if form.imagens.errors %}
+            <div class="text-danger small mt-2">{{ form.imagens.errors }}</div>
+            {% endif %}
           </div>
 
           <div class="alert alert-info small py-2">
@@ -111,10 +221,41 @@
     </div>
   </div>
 </div>
+
+<!-- ── Modal de busca de categorias ML ── -->
+<div class="modal fade" id="modalCategoriasML" tabindex="-1" aria-labelledby="modalCategoriasMLLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold" id="modalCategoriasMLLabel">
+          <span class="me-2 fw-bold" style="color:#ffe600;text-shadow:0 0 2px #999">ML</span>
+          Pesquisar Categoria
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-3">
+        <div class="input-group mb-3">
+          <input type="text" id="modal-cat-input" class="form-control"
+                 placeholder="Ex.: impressora 3d, filamento pla, resina..." autocomplete="off">
+          <button class="btn btn-warning fw-semibold" type="button" id="modal-cat-btn">
+            <i class="bi bi-search"></i>
+          </button>
+        </div>
+        <div id="modal-cat-loading" class="text-center text-muted small py-3 d-none">
+          <span class="spinner-border spinner-border-sm me-1"></span> Buscando...
+        </div>
+        <div id="modal-cat-error" class="alert alert-warning small py-2 d-none"></div>
+        <div id="modal-cat-results"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
+/* ── Atributos ML (AJAX) ── */
 (function () {
   const catInput   = document.getElementById('id_categoria_ml');
   const container  = document.getElementById('ml-attributes-container');
@@ -124,7 +265,6 @@
   const errDiv     = document.getElementById('ml-attributes-error');
   const errMsg     = document.getElementById('ml-attributes-error-msg');
   const form       = catInput ? catInput.closest('form') : null;
-
   let currentAttrs = [];
 
   function collectAttrs() {
@@ -139,10 +279,7 @@
   function renderAttrs(attrs) {
     currentAttrs = attrs;
     fieldsDiv.innerHTML = '';
-    if (!attrs.length) {
-      container.classList.add('d-none');
-      return;
-    }
+    if (!attrs.length) { container.classList.add('d-none'); return; }
     attrs.forEach(a => {
       const wrap = document.createElement('div');
       wrap.className = 'mb-2';
@@ -151,19 +288,16 @@
       label.textContent = a.name;
       label.setAttribute('for', 'ml_attr_' + a.id);
       wrap.appendChild(label);
-
       let input;
       if (a.values && a.values.length) {
         input = document.createElement('select');
         input.className = 'form-select form-select-sm';
         const blank = document.createElement('option');
-        blank.value = '';
-        blank.textContent = '— selecione —';
+        blank.value = ''; blank.textContent = '— selecione —';
         input.appendChild(blank);
         a.values.forEach(v => {
           const opt = document.createElement('option');
-          opt.value = v;
-          opt.textContent = v;
+          opt.value = v; opt.textContent = v;
           input.appendChild(opt);
         });
       } else {
@@ -190,28 +324,303 @@
       const url = "{% url 'integracoes:ml_category_attributes' %}?cat=" + encodeURIComponent(catId);
       const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
       const data = await resp.json();
-      if (data.error) {
-        errMsg.textContent = data.error;
-        errDiv.classList.remove('d-none');
-      } else {
-        renderAttrs(data.attributes || []);
-      }
+      if (data.error) { errMsg.textContent = data.error; errDiv.classList.remove('d-none'); }
+      else { renderAttrs(data.attributes || []); }
     } catch (e) {
       errMsg.textContent = 'Não foi possível carregar atributos da categoria.';
       errDiv.classList.remove('d-none');
-    } finally {
-      loading.classList.add('d-none');
-    }
+    } finally { loading.classList.add('d-none'); }
   }
 
   if (catInput) {
     catInput.addEventListener('blur', () => fetchAttrs(catInput.value.trim()));
-    // Load on page open if field already has value (edit scenario)
     if (catInput.value.trim()) fetchAttrs(catInput.value.trim());
   }
+  if (form) { form.addEventListener('submit', () => collectAttrs()); }
+})();
 
-  if (form) {
-    form.addEventListener('submit', () => collectAttrs());
+/* ── Upload de fotos estilo ML ── */
+(function () {
+  const fileInput   = document.getElementById('id_imagens');
+  const grid        = document.getElementById('photo-grid');
+  const addMoreSlot = document.getElementById('slot-add-more');
+  const badge       = document.getElementById('photos-count-badge');
+  const photosError = document.getElementById('photos-error');
+  const form        = document.getElementById('pi-form');
+
+  let files = []; // File[] em ordem
+
+  function updateBadge() {
+    const n = files.length;
+    badge.textContent = n + ' / máx. 10';
+    badge.className = 'badge ms-1 ' + (n >= 2 ? 'bg-success' : 'bg-danger');
+    // Esconde o botão "+" ao atingir 10 fotos
+    addMoreSlot.style.display = n >= 10 ? 'none' : '';
+  }
+
+  function buildDataTransfer() {
+    const dt = new DataTransfer();
+    files.forEach(f => dt.items.add(f));
+    fileInput.files = dt.files;
+  }
+
+  function makePlaceholderSlot(label, required) {
+    const slot = document.createElement('div');
+    slot.className = 'photo-slot' + (label === 'Capa' ? ' cover-slot' : '');
+    slot.innerHTML =
+      '<span class="add-icon"><i class="bi bi-plus-circle"></i></span>' +
+      '<span class="slot-label">' + label + (required ? '<br><span class="text-danger">*</span>' : '') + '</span>';
+    slot.addEventListener('click', () => fileInput.click());
+    slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('dragover'); });
+    slot.addEventListener('dragleave', () => slot.classList.remove('dragover'));
+    slot.addEventListener('drop', e => { e.preventDefault(); slot.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+    return slot;
+  }
+
+  function renderSlots() {
+    // Remove todos os slots existentes exceto o botão "+"
+    grid.querySelectorAll('.photo-slot:not(#slot-add-more)').forEach(s => s.remove());
+
+    if (files.length === 0) {
+      grid.insertBefore(makePlaceholderSlot('Capa', true), addMoreSlot);
+      grid.insertBefore(makePlaceholderSlot('Foto 2', true), addMoreSlot);
+    } else if (files.length === 1) {
+      // Renderiza slot de preview para a capa
+      grid.insertBefore(makePreviewSlot(files[0], 0), addMoreSlot);
+      grid.insertBefore(makePlaceholderSlot('Foto 2', true), addMoreSlot);
+    } else {
+      files.forEach((file, idx) => {
+        grid.insertBefore(makePreviewSlot(file, idx), addMoreSlot);
+      });
+    }
+
+    updateBadge();
+  }
+
+  function makePreviewSlot(file, idx) {
+    const slot = document.createElement('div');
+    slot.className = 'photo-slot' + (idx === 0 ? ' cover-slot' : '');
+    slot.dataset.index = idx;
+    slot.draggable = true;
+
+    const img = document.createElement('img');
+    img.className = 'preview';
+    img.alt = file.name;
+    const reader = new FileReader();
+    reader.onload = e => { img.src = e.target.result; };
+    reader.readAsDataURL(file);
+    slot.appendChild(img);
+
+    if (idx === 0) {
+      const coverBadge = document.createElement('div');
+      coverBadge.className = 'cover-badge';
+      coverBadge.textContent = '★ CAPA';
+      slot.appendChild(coverBadge);
+    }
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.innerHTML = '<i class="bi bi-x"></i>';
+    removeBtn.title = 'Remover foto';
+    removeBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      files.splice(idx, 1);
+      buildDataTransfer();
+      renderSlots();
+    });
+    slot.appendChild(removeBtn);
+
+    // Drag to reorder
+    slot.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', String(idx));
+      slot.style.opacity = '0.5';
+    });
+    slot.addEventListener('dragend', () => { slot.style.opacity = ''; });
+    slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('dragover'); });
+    slot.addEventListener('dragleave', () => slot.classList.remove('dragover'));
+    slot.addEventListener('drop', e => {
+      e.preventDefault();
+      slot.classList.remove('dragover');
+      const from = parseInt(e.dataTransfer.getData('text/plain'), 10);
+      const to = idx;
+      if (from !== to) {
+        const moved = files.splice(from, 1)[0];
+        files.splice(to, 0, moved);
+        buildDataTransfer();
+        renderSlots();
+      }
+    });
+
+    return slot;
+  }
+
+  function handleFiles(newFiles) {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const MAX = 10;
+    Array.from(newFiles).forEach(f => {
+      if (files.length >= MAX) return; // ignora excedentes silenciosamente
+      if (allowed.includes(f.type)) { files.push(f); }
+    });
+    if (files.length >= MAX) {
+      photosError.textContent = 'Máximo de 10 fotos atingido.';
+      photosError.classList.remove('d-none');
+    }
+    buildDataTransfer();
+    renderSlots();
+    if (files.length < MAX) photosError.classList.add('d-none');
+  }
+
+  // Botão "Adicionar foto"
+  addMoreSlot.addEventListener('click', () => fileInput.click());
+  addMoreSlot.addEventListener('dragover', e => { e.preventDefault(); addMoreSlot.classList.add('dragover'); });
+  addMoreSlot.addEventListener('dragleave', () => addMoreSlot.classList.remove('dragover'));
+  addMoreSlot.addEventListener('drop', e => { e.preventDefault(); addMoreSlot.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+
+  // Input file change
+  fileInput.addEventListener('change', () => {
+    handleFiles(fileInput.files);
+    // Não limpa fileInput.value aqui — limparia a FileList do DataTransfer
+  });
+
+  // Validação antes de submit
+  form.addEventListener('submit', e => {
+    // Re-sincroniza o files[] array ao input antes de submeter
+    // (necessário porque fileInput.files pode ter sido limpo pelo browser)
+    buildDataTransfer();
+    if (files.length < 2) {
+      e.preventDefault();
+      photosError.classList.remove('d-none');
+      photosError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+
+  renderSlots();
+})();
+
+/* ── Modal busca de categorias ML ── */
+(function () {
+  const modalEl      = document.getElementById('modalCategoriasML');
+  const searchInput  = document.getElementById('modal-cat-input');
+  const searchBtn    = document.getElementById('modal-cat-btn');
+  const loading      = document.getElementById('modal-cat-loading');
+  const errorDiv     = document.getElementById('modal-cat-error');
+  const resultsDiv   = document.getElementById('modal-cat-results');
+  const catInput     = document.getElementById('id_categoria_ml');
+  const labelWrap    = document.getElementById('categoria-selecionada');
+  const labelNome    = document.getElementById('categoria-selecionada-nome');
+  const BUSCA_URL    = "{% url 'integracoes:ml_categorias_busca' %}";
+
+  let debounceTimer = null;
+
+  // Foca no input ao abrir o modal
+  if (modalEl) {
+    modalEl.addEventListener('shown.bs.modal', () => {
+      searchInput.focus();
+      // Se já tem um valor no campo, pré-busca
+      const currentVal = catInput ? catInput.value.trim() : '';
+      if (currentVal && !searchInput.value) {
+        // não pré-busca por código, apenas por nome
+      }
+    });
+    modalEl.addEventListener('hidden.bs.modal', () => {
+      searchInput.value = '';
+      resultsDiv.innerHTML = '';
+      errorDiv.classList.add('d-none');
+    });
+  }
+
+  async function doSearch(term) {
+    if (!term || term.length < 2) {
+      errorDiv.textContent = 'Digite ao menos 2 caracteres.';
+      errorDiv.classList.remove('d-none');
+      resultsDiv.innerHTML = '';
+      return;
+    }
+    loading.classList.remove('d-none');
+    errorDiv.classList.add('d-none');
+    resultsDiv.innerHTML = '';
+    try {
+      const resp = await fetch(BUSCA_URL + '?q=' + encodeURIComponent(term), {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      });
+      const data = await resp.json();
+      loading.classList.add('d-none');
+      if (data.error) {
+        errorDiv.textContent = data.error;
+        errorDiv.classList.remove('d-none');
+        return;
+      }
+      renderResults(data.results || []);
+    } catch (e) {
+      loading.classList.add('d-none');
+      errorDiv.textContent = 'Erro ao buscar categorias. Tente novamente.';
+      errorDiv.classList.remove('d-none');
+    }
+  }
+
+  function renderResults(results) {
+    if (!results.length) {
+      resultsDiv.innerHTML =
+        '<div class="text-center text-muted small py-4">' +
+        '<i class="bi bi-search" style="font-size:1.8rem"></i>' +
+        '<p class="mt-2 mb-0">Nenhuma categoria encontrada. Tente outro termo.</p></div>';
+      return;
+    }
+    const table = document.createElement('table');
+    table.className = 'table table-sm table-hover align-middle mb-0';
+    table.innerHTML =
+      '<thead class="table-light">' +
+      '<tr><th style="width:130px">ID</th><th>Categoria</th><th class="text-muted small">Domínio</th><th></th></tr>' +
+      '</thead>';
+    const tbody = document.createElement('tbody');
+    results.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      tr.innerHTML =
+        '<td><code class="fw-bold text-primary">' + r.id + '</code></td>' +
+        '<td class="fw-semibold">' + r.name + '</td>' +
+        '<td class="text-muted small">' + (r.domain || '') + '</td>' +
+        '<td class="text-end"><button type="button" class="btn btn-sm btn-primary">Selecionar</button></td>';
+      tr.addEventListener('click', () => selectCategory(r.id, r.name));
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    resultsDiv.appendChild(table);
+  }
+
+  function selectCategory(id, name) {
+    if (catInput) {
+      catInput.value = id;
+      // Dispara blur para carregar atributos obrigatórios da categoria
+      catInput.dispatchEvent(new Event('blur'));
+    }
+    if (labelWrap && labelNome) {
+      labelNome.textContent = id + ' — ' + name;
+      labelWrap.classList.remove('d-none');
+    }
+    // Fecha o modal
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+  }
+
+  if (searchBtn) {
+    searchBtn.addEventListener('click', () => doSearch(searchInput.value.trim()));
+  }
+  if (searchInput) {
+    searchInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); doSearch(searchInput.value.trim()); }
+    });
+    searchInput.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => doSearch(searchInput.value.trim()), 500);
+    });
+  }
+
+  // Se o campo já tem valor ao carregar a página, mostra o label (sem buscar nome)
+  if (catInput && catInput.value.trim() && labelWrap && labelNome) {
+    labelNome.textContent = catInput.value.trim();
+    labelWrap.classList.remove('d-none');
   }
 })();
 </script>

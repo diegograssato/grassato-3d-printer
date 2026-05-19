@@ -1,0 +1,95 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Simulação de chamadas do MercadoLivre.
+#
+# CALLBACK OAUTH (/integracoes/ml/callback/)
+#   - Método: GET  (o ML redireciona o browser, não faz POST)
+#   - Sem CSRF: GET nunca exige CSRF no Django
+#   - Parâmetro de integração: ?state=<pk>  (não integracao_pk)
+#
+# NOTIFICAÇÕES IPN (/integracoes/ml/notificacao/)
+#   - Método: POST
+#   - Sem CSRF: view decorada com @csrf_exempt
+# ──────────────────────────────────────────────────────────────────────────────
+
+### 0. Callback OAuth — simula o redirecionamento do ML após autorização
+# ?code    = código temporário emitido pelo ML (válido ~10 min, uso único)
+# ?state   = pk da Integracao no banco (enviado na URL de autorização)
+GET http://localhost/integracoes/ml/callback/?code=TG-FAKE-CODE-12345&state=1
+
+###
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Simulação de chamadas do MercadoLivre para o endpoint de notificações IPN.
+# O endpoint /integracoes/ml/notificacao/ é @csrf_exempt — não precisa de token.
+# ──────────────────────────────────────────────────────────────────────────────
+
+### 1. Validação de URL (GET que o ML faz antes de ativar as notificações)
+GET http://localhost/integracoes/ml/notificacao/
+User-Agent: MercadoLibre-Webhook/1.0
+
+###
+### 2. Notificação de mudança de status de anúncio (topic: items)
+POST http://localhost/integracoes/ml/notificacao/
+Content-Type: application/json
+User-Agent: MercadoLibre-Webhook/1.0
+
+{
+  "resource": "/items/MLB4690644269",
+  "topic": "items",
+  "application_id": "70a5c19c-838e-4910-96f5-b719df787bbf",
+  "user_id": 1,
+  "attempts": 1,
+  "sent": "2026-05-18T22:38:41.000Z",
+  "received": "2026-05-18T22:38:41.000Z"
+}
+
+###
+
+### 3. Notificação de novo pedido (topic: orders_v2)
+POST http://localhost/integracoes/ml/notificacao/
+Content-Type: application/json
+User-Agent: MercadoLibre-Webhook/1.0
+
+{
+  "resource": "/orders/123456789",
+  "topic": "orders_v2",
+  "application_id": 123456789,
+  "user_id": 1,
+  "attempts": 1,
+  "sent": "2026-05-18T22:34:14.000Z",
+  "received": "2026-05-18T22:34:14.000Z"
+}
+
+###
+
+### 4. Notificação de atualização de preço (topic: item_price)
+POST http://localhost/integracoes/ml/notificacao/
+Content-Type: application/json
+User-Agent: MercadoLibre-Webhook/1.0
+
+{
+  "resource": "/items/MLB5523898570/price",
+  "topic": "item_price",
+  "application_id": 123456789,
+  "user_id": 1,
+  "attempts": 1,
+  "sent": "2026-05-18T22:34:14.000Z",
+  "received": "2026-05-18T22:34:14.000Z"
+}
+
+###
+
+### 5. Notificação de atualização de estoque (topic: item_status)
+POST http://localhost/integracoes/ml/notificacao/
+Content-Type: application/json
+User-Agent: MercadoLibre-Webhook/1.0
+
+{
+  "resource": "/items/MLB5523898570",
+  "topic": "item_status",
+  "application_id": 123456789,
+  "user_id": 1,
+  "attempts": 1,
+  "sent": "2026-05-18T22:34:14.000Z",
+  "received": "2026-05-18T22:34:14.000Z"
+}

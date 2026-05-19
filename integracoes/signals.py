@@ -129,3 +129,39 @@ def produto_pre_delete_ml(sender, instance, **kwargs):
             logger.info('ML listing paused on product delete: %s', pi.sku_externo)
         except Exception as exc:
             logger.error('ML pause on delete error for %s: %s', pi.sku_externo, exc)
+
+
+@receiver(pre_delete, sender='integracoes.ProdutoIntegracao')
+def produto_integracao_pre_delete_ml(sender, instance, **kwargs):
+    """
+    Antes de remover o vínculo produto↔integração: pausa o anúncio no ML.
+    Garante que o item não fique ativo sem um dono no sistema.
+    """
+    if instance.integracao.plataforma != 'ML':
+        return
+    if not instance.sku_externo:
+        return
+    if not instance.integracao.ativa:
+        return
+
+    try:
+        from integracoes.services.mercadolivre import MercadoLivreService
+        ml = MercadoLivreService()
+        ok = ml.pause_listing(instance.integracao, instance.sku_externo)
+        if ok:
+            logger.info(
+                'ML listing paused on integracao delete: sku=%s produto=%s',
+                instance.sku_externo,
+                instance.produto_id,
+            )
+        else:
+            logger.warning(
+                'ML listing pause falhou ao remover vínculo: sku=%s',
+                instance.sku_externo,
+            )
+    except Exception as exc:
+        logger.error(
+            'ML pause on ProdutoIntegracao delete error: sku=%s exc=%s',
+            instance.sku_externo,
+            exc,
+        )

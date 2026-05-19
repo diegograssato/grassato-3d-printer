@@ -38,6 +38,7 @@ services:
       DEBUG: "True"
       ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96,grassato-makers.duckdns.org"
       CSRF_TRUSTED_ORIGINS: "http://grassato-makers.duckdns.org,https://grassato-makers.duckdns.org,http://10.22.0.96:8080,http://localhost,http://127.0.0.1"
+      ML_CALLBACK_URI: "http://grassato-makers.duckdns.org/integracoes/ml/callback/"
       USE_X_FORWARDED_HOST: "True"
       HTTP_X_FORWARDED_PROTO: "http"
       DB_ENGINE: mysql
@@ -60,11 +61,14 @@ services:
       - 8000
     volumes:
       - static_files:/app/staticfiles
+      - media_files:/app/media
     networks:
       - backend
     depends_on:
-      - database
-      - redis
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     deploy:
       mode: replicated
       replicas: 4
@@ -80,19 +84,93 @@ services:
         mode: ingress
     volumes:
       - static_files:/usr/share/nginx/html/static:ro 
+      - media_files:/usr/share/nginx/html/media:ro
     networks:
       - backend
       - npm_public
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     deploy:
       mode: replicated
       replicas: 1
       restart_policy:
         condition: on-failure  
 
+  # ── Celery Worker ─────────────────────────────────────────────────────────
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: grassato-celery
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A config worker
+      --loglevel=debug
+      --queues=ml_oauth,ml_orders,ml_status,default
+      --concurrency=2
+      --hostname=celery@%h
+    environment:
+     SECRET_KEY: "AsdkaoskoaAqeqwowqw3"
+     DEBUG: "True"
+     ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96,grassato-makers.duckdns.org"
+     CSRF_TRUSTED_ORIGINS: "http://grassato-makers.duckdns.org,https://grassato-makers.duckdns.org,http://10.22.0.96:8080,http://localhost,http://127.0.0.1"
+     ML_CALLBACK_URI: "http://grassato-makers.duckdns.org/integracoes/ml/callback/"
+     USE_X_FORWARDED_HOST: "True"
+     HTTP_X_FORWARDED_PROTO: "http"
+     DB_ENGINE: mysql
+     DB_NAME: "grassato-3d"
+     DB_USER: "diego"
+     DB_PASSWORD: "anna"
+     DB_HOST: tasks.database
+     DB_PORT: "3306"
+     REDIS_URL: "redis://redis:6379" # Alterado de IP para o nome do serviço
+     GUNICORN_WORKERS: "3"
+     GUNICORN_THREADS: "4"
+     DJANGO_SUPERUSER_USERNAME: "admin"
+     DJANGO_SUPERUSER_EMAIL: "diego.grassato@gmail.com"
+     DJANGO_SUPERUSER_PASSWORD: "admin123"
+     CELERY_BROKER_URL: redis://redis:6379/1
+     CELERY_RESULT_BACKEND: redis://redis:6379/1
+    volumes:
+      - static_files:/usr/share/nginx/html/static:ro 
+      - media_files:/usr/share/nginx/html/media:ro
+    networks:
+      - backend
+
+  # ── Celery Flower (Monitoramento Web) ─────────────────────────────────────
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: grassato-flower
+    restart: unless-stopped
+    command: >
+      celery -A config flower
+      --port=5555
+      --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    ports:
+      - target: 5555
+        published: 5555
+        mode: ingress      
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+      - frontend
+
 volumes:
   static_files:
+  media_files:
   mysql_data:                   # Volume persistente para o banco de dados
 
 networks:

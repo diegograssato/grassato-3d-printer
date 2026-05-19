@@ -1,6 +1,6 @@
 # Grassato's 3D — Sistema de Gestão
 
-Sistema web completo para gestão de negócio de impressão 3D, desenvolvido com **Django 4.2** e **Poetry**.
+Sistema web completo para gestão de negócio de impressão 3D, desenvolvido com **Django 4.2**, **Celery**, **Redis** e **Poetry**.
 
 ---
 
@@ -14,23 +14,157 @@ Sistema web completo para gestão de negócio de impressão 3D, desenvolvido com
 | **Caixa** | Controle de entradas e saídas com filtros por mês/tipo, saldo acumulado e lançamentos manuais |
 | **Dashboard** | Cards com receita, despesas, lucro e saldo do mês; gráfico de barras (6 meses); alertas de estoque crítico |
 | **Balancete** | Tabela mensal com faturamento, entradas, saídas, resultado e saldo acumulado (12 meses) |
-
-### Automações via signals Django
-- Venda registrada → decrementa `Produto.estoque_quantidade` e `Filamento.peso_disponivel_g`
-- Venda registrada → cria `MovimentacaoCaixa` (ENTRADA) automaticamente
-- Venda excluída → reverte estoque do produto e do filamento
-- Filamento cadastrado → cria `MovimentacaoCaixa` (SAÍDA/Compra de Filamento) automaticamente
+| **Integrações ML** | Publicação de produtos no MercadoLivre via OAuth2, upload de fotos, notificações IPN assíncronas |
 
 ---
 
-## Stack
+## Integrações — MercadoLivre
 
-- **Backend:** Python 3.11+, Django 4.2, Gunicorn
-- **Banco de dados:** SQLite (dev) · MySQL 8 (prod)
-- **Cache / Sessões:** Redis 7 (opcional, ativado via `REDIS_URL`)
-- **Frontend:** Bootstrap 5.3 + Bootstrap Icons + Chart.js (via CDN)
-- **Static files:** WhiteNoise
-- **Gerenciador de dependências:** Poetry
+### OAuth2
+1. Cadastre uma integração em **Integrações → Nova Integração** com seu `client_id` e `client_secret`.
+2. Clique em **Autorizar** para iniciar o fluxo OAuth2. O callback é processado de forma assíncrona via Celery.
+
+### Publicar produto
+1. Na lista de produtos, clique em **Publicar no ML**.
+2. Informe a **Categoria ML** (ex.: `MLB268508`), preencha os atributos obrigatórios e faça o **upload de fotos** (mínimo 2).
+3. A **primeira foto** é automaticamente a capa do anúncio. Arraste para reordenar.
+
+### Notificações IPN (webhooks)
+O endpoint `/integracoes/ml/notificacao/` recebe:
+- `orders_v2` / `orders` → processa pedido na fila `ml_orders`
+- `items` / `item_status` / `item_price` → processa atualização de produto na fila `ml_status`
+
+### Upload de fotos
+- Mínimo 2 fotos por anúncio (capa obrigatória + 1 adicional)
+- Formatos aceitos: JPEG, PNG, WebP
+- Tamanho máximo por imagem: 10 MB
+- Suporte a drag-and-drop e reordenação visual
+- As imagens são salvas em `/media/integracoes/imagens/` e servidas pelo Nginx
+
+---
+
+## Automações via Signals Django
+
+- Venda registrada → decrementa `Produto.estoque_quantidade` e `Filamento.peso_disponivel_g`
+- Venda registrada → cria `MovimentacaoCaixa` (ENTRADA) automaticamente
+- Compra de filamento → cria `MovimentacaoCaixa` (SAÍDA) automaticamente
+- Produto publicado no ML → salva `sku_externo` e `status_externo`
+
+---
+
+## Processamento Assíncrono (Celery + Redis)
+
+Todas as operações com o MercadoLivre são processadas de forma assíncrona para garantir resposta rápida e resiliência.
+
+| Fila | Task | Finalidade |
+|---|---|---|
+| `ml_oauth` | `processar_oauth_ml` | Troca o `code` pelo token OAuth2 |
+| `ml_orders` | `processar_pedido_ml` | Processa novos pedidos |
+| `ml_status` | `processar_status_ml` | Atualiza status de produtos |
+
+- **Retry automático** com backoff exponencial (máx. 3–5 tentativas)
+- **Monitoramento** via Celery Flower em `http://localhost:5555`
+- Em desenvolvimento (`DEBUG=True`): tasks executam de forma síncrona (`CELERY_TASK_ALWAYS_EAGER=True`)
+
+---
+
+## Stack Técnica
+
+| Componente | Tecnologia |
+|---|---|
+| Backend | Python 3.12 + Django 4.2 |
+| Servidor WSGI | Gunicorn |
+| Fila de tarefas | Celery 5.6 + Redis 7 |
+| Cache / Sessões | Redis (DB 0) |
+| Broker / Result | Redis (DB 1) |
+| Banco de dados | MySQL 8.0 (produção) / SQLite (dev) |
+| Upload de imagens | Pillow 11 |
+| Monitoramento Celery | Flower 2.0 |
+| Proxy reverso | Nginx 1.27 |
+| Containerização | Docker + Docker Compose |
+| Gerenciador de deps | Poetry |
+
+---
+
+## Rodando localmente (SQLite, sem Docker)
+
+```bash
+# Instala dependências
+poetry install
+
+# Cria banco e superusuário
+poetry run python manage.py migrate
+poetry run python manage.py createsuperuser
+
+# Inicia o servidor
+poetry run python manage.py runserver
+```
+
+Acesse em `http://localhost:8000`. Login com as credenciais criadas.
+
+> Em desenvolvimento, as tasks Celery rodam de forma síncrona — não é necessário Redis/Celery rodando.
+
+---
+
+## Rodando com Docker Compose (produção)
+
+### Pré-requisitos
+- Docker ≥ 24 e Docker Compose V2
+- Arquivo `.env` na raiz (veja `.env.example`)
+
+### Subir todos os serviços
+
+```bash
+docker compose up -d --build
+```
+
+### Serviços disponíveis
+
+| Serviço | URL |
+|---|---|
+| Aplicação | `http://localhost` (via Nginx) |
+| Flower (Celery) | `http://localhost:5555` |
+
+### Variáveis de ambiente essenciais (`.env`)
+
+```dotenv
+SECRET_KEY=sua-chave-secreta-longa
+DB_NAME=grassato3d
+DB_USER=grassato
+DB_PASSWORD=senha_db
+DB_ROOT_PASSWORD=senha_root
+
+# Superusuário criado automaticamente na primeira inicialização
+DJANGO_SUPERUSER_USERNAME=admin
+DJANGO_SUPERUSER_EMAIL=admin@exemplo.com
+DJANGO_SUPERUSER_PASSWORD=senha_admin
+
+# Flower
+FLOWER_USER=admin
+FLOWER_PASSWORD=senha_flower
+
+# ngrok / domínio público para callbacks do ML
+SITE_URL=https://seu-dominio.ngrok-free.app
+```
+
+### Comandos úteis
+
+```bash
+# Ver logs da aplicação
+docker compose logs -f app
+
+# Ver logs do worker Celery
+docker compose logs -f celery
+
+# Monitorar filas no Flower
+open http://localhost:5555
+
+# Rodar migrations manualmente
+docker compose exec app python manage.py migrate
+
+# Gerar novas migrations
+docker compose exec app python manage.py makemigrations
+```
 
 ---
 
@@ -38,201 +172,41 @@ Sistema web completo para gestão de negócio de impressão 3D, desenvolvido com
 
 ```
 grassato-3d/
-├── config/               # Settings, URLs, WSGI
-├── estoque/              # App: Filamentos e Produtos
-├── vendas/               # App: Vendas + Signals
-├── caixa/                # App: Controle de Caixa
-├── dashboard/            # App: Dashboard e Balancete
-├── templates/            # Templates HTML (Bootstrap 5)
-├── k8s/                  # Manifests Kubernetes
-├── Dockerfile
+├── config/                  # Configurações Django + Celery
+├── caixa/                   # Módulo caixa/financeiro
+├── dashboard/               # Dashboard e balancete
+├── estoque/                 # Filamentos e produtos
+├── integracoes/             # MercadoLivre + Celery tasks
+│   ├── services/            # Cliente da API ML
+│   ├── tasks.py             # Tasks assíncronas Celery
+│   └── migrations/
+├── vendas/                  # Registro de vendas
+├── templates/               # Templates HTML (Bootstrap 5)
+├── staticfiles/             # Static files coletados
+├── media/                   # Uploads de imagens (prod: volume Docker)
 ├── docker-compose.yaml
+├── Dockerfile
 ├── nginx.conf
-└── pyproject.toml
+├── pyproject.toml
+└── manage.py
 ```
 
 ---
 
-## Desenvolvimento Local
+## Kubernetes (k8s/)
 
-### Pré-requisitos
-- Python 3.11+
-- [Poetry](https://python-poetry.org/docs/#installation)
+A pasta `k8s/` contém manifestos para deploy no **Azure Kubernetes Service (AKS)**:
 
-### Instalação
-
-```bash
-# 1. Clonar o repositório
-git clone <url-do-repositorio>
-cd grassato-3d
-
-# 2. Instalar dependências
-poetry install --no-root
-
-# 3. Configurar variáveis de ambiente
-cp .env.example .env
-# Edite .env conforme necessário
-
-# 4. Criar banco e aplicar migrações
-poetry run python manage.py migrate
-
-# 5. Criar superusuário (painel admin)
-poetry run python manage.py createsuperuser
-
-# 6. Iniciar servidor
-poetry run python manage.py runserver
-```
-
-Acesse: **http://localhost:8000**  
-Painel admin: **http://localhost:8000/admin**
-
----
-
-## Variáveis de Ambiente
-
-| Variável | Padrão | Descrição |
-|---|---|---|
-| `SECRET_KEY` | *(insecure dev key)* | Chave secreta do Django |
-| `DEBUG` | `True` | Modo debug |
-| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Hosts permitidos |
-| `DB_ENGINE` | `sqlite3` | `sqlite3` ou `mysql` |
-| `DB_NAME` | `grassato3d` | Nome do banco |
-| `DB_USER` | `grassato` | Usuário do banco |
-| `DB_PASSWORD` | *(vazio)* | Senha do banco |
-| `DB_HOST` | `127.0.0.1` | Host do banco |
-| `DB_PORT` | `3306` | Porta do banco |
-| `REDIS_URL` | *(vazio)* | URL do Redis — ex: `redis://localhost:6379/0` |
-| `GUNICORN_WORKERS` | `2` | Workers do Gunicorn |
-| `GUNICORN_THREADS` | `4` | Threads por worker |
-
----
-
-## Docker Compose (Produção local)
-
-Sobe o stack completo: **MySQL 8 + Redis 7 + Django/Gunicorn + Nginx**.
-
-```bash
-# Copiar e ajustar variáveis
-cp .env.example .env
-# Edite: SECRET_KEY, DB_PASSWORD, DB_ROOT_PASSWORD
-
-# Build e subir
-docker compose up -d --build
-
-# Acompanhar logs
-docker compose logs -f app
-```
-
-Acesse: **http://localhost**
-
-### Serviços
-
-| Serviço | Porta | Descrição |
-|---|---|---|
-| `nginx` | `80` | Proxy reverso + static files |
-| `app` | `8000` (interno) | Django + Gunicorn |
-| `db` | `3306` (interno) | MySQL 8 |
-| `redis` | `6379` (interno) | Redis 7 |
-
----
-
-## Kubernetes
-
-Os manifests estão em `k8s/`. A aplicação usa `ConfigMap` para configurações e `Secret` para credenciais.
-
-### Ordem de aplicação
-
-```bash
-# 1. Namespace
-kubectl apply -f k8s/namespace.yaml
-
-# 2. Secrets (edite as senhas antes!)
-kubectl apply -f k8s/secret.yaml
-
-# 3. ConfigMap (ajuste host/domínio)
-kubectl apply -f k8s/configmap.yaml
-
-# 4. Infraestrutura (MySQL StatefulSet + Redis)
-kubectl apply -f k8s/infra.yaml
-
-# 5. Aplicação
-kubectl apply -f k8s/deployment.yaml
-
-# 6. Ingress
-kubectl apply -f k8s/ingress.yaml
-
-# 7. HPA (auto-scaling)
-kubectl apply -f k8s/hpa.yaml
-```
-
-### Arquitetura K8s
-
-```
-Internet
-   │
-   ▼
-Ingress (nginx)
-   │
-   ▼
-grassato-service (ClusterIP :80)
-   │
-   ▼
-grassato-app (Deployment, 2–6 réplicas)
-   │           │
-   ▼           ▼
-mysql-service  redis-service
-(StatefulSet)  (Deployment)
-```
-
-### Manifests
-
-| Arquivo | Recurso | Descrição |
-|---|---|---|
-| `namespace.yaml` | Namespace | `grassato-3d` |
-| `configmap.yaml` | ConfigMap | Variáveis de ambiente (não-sensíveis) |
-| `secret.yaml` | Secret | SECRET_KEY, DB_USER, DB_PASSWORD |
-| `deployment.yaml` | Deployment + Service | App Django; init container executa `migrate` |
-| `infra.yaml` | StatefulSet + Deployments | MySQL 8 e Redis 7 com Services |
-| `ingress.yaml` | Ingress | Roteamento HTTP/HTTPS (suporte a cert-manager) |
-| `hpa.yaml` | HorizontalPodAutoscaler | Escala de 2 a 6 réplicas por CPU/memória |
-
-### Build e push da imagem
-
-```bash
-# Build
-docker build -t seu-registry/grassato-3d:latest .
-
-# Push
-docker push seu-registry/grassato-3d:latest
-
-# Atualizar imagem no cluster
-kubectl set image deployment/grassato-app \
-  grassato-app=seu-registry/grassato-3d:latest \
-  -n grassato-3d
-```
-
-> **Atenção:** substitua `seu-registry/grassato-3d` pela URL do seu registry (Docker Hub, GCR, ECR, etc.) em `k8s/deployment.yaml` antes de aplicar.
-
----
-
-## Rotas da Aplicação
-
-| URL | Módulo | Descrição |
-|---|---|---|
-| `/` | Dashboard | Dashboard geral |
-| `/balancete/` | Dashboard | Balancete mensal (12 meses) |
-| `/estoque/filamentos/` | Estoque | Listagem de filamentos |
-| `/estoque/filamentos/novo/` | Estoque | Cadastrar filamento |
-| `/estoque/produtos/` | Estoque | Listagem de produtos |
-| `/estoque/produtos/novo/` | Estoque | Cadastrar produto |
-| `/vendas/` | Vendas | Listagem de vendas |
-| `/vendas/nova/` | Vendas | Registrar venda |
-| `/caixa/` | Caixa | Controle de caixa |
-| `/caixa/nova/` | Caixa | Lançamento manual |
-| `/admin/` | Admin | Painel administrativo Django |
+- `namespace.yaml` — namespace `grassato`
+- `configmap.yaml` — variáveis de configuração
+- `secret.yaml` — credenciais sensíveis (base64)
+- `deployment.yaml` — Deployment da aplicação
+- `hpa.yaml` — HorizontalPodAutoscaler
+- `ingress.yaml` — Ingress NGINX
+- `infra.yaml` — serviços de infraestrutura
 
 ---
 
 ## Licença
 
-Uso interno — Grassato's 3D.
+Projeto proprietário — Grassato Impressão 3D.

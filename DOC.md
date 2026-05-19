@@ -15,8 +15,11 @@ A sistema deve conter:
 - saldo de caixa
 - resumo financeiro
 
-Novas features no sistema:
-- Do lado da opção de deletar Fornecedor:
- - Adicionar um icone de utilização, ao clicar mostrar em uma pagina onde está sendo utilizado o Fornecedor(caixa, ou filamentto), com link para apontando para item.
-- Do lado da opção de deletar Filamento:
- - Adicionar um icone de utilização, ao clicar mostrar em uma pagina onde está sendo utilizado o filamento, com link para apontando para o produto.
+Ajuste em features no sistema:
+-  Ao cadastrar um produto no MercadoLivre, as imagens estão indo para processamento, preciso que o produto já entre validado, algumas alternativas:
+ - Garanta que as imagens estão sendo enviadas para o MercadoLivre.
+ - Envie no máximo 10 fotos no formato JPG, JPEG, PNG o WEBP
+ - Certifique-se de que cada uma tenha mais de 500 pixels em um dos lados e até 10 MB
+ - Use o tamanho recomendado de 1200 x 1200 pixels.
+
+ 

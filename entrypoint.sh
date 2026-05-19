@@ -1,11 +1,17 @@
 #!/bin/sh
 set -e
 
-echo "==> Applying database migrations..."
-python manage.py migrate --noinput
+# Garante que /app/media existe e é gravável pelo processo atual
+# (o volume Docker pode ser montado como root na primeira execução)
+mkdir -p /app/media
 
-echo "==> Creating superuser (if not exists)..."
-python manage.py shell -c "
+# Migrações e superusuário apenas no processo principal (app), não no worker
+if [ "$1" != "celery" ]; then
+    echo "==> Applying database migrations..."
+    python manage.py migrate --noinput
+
+    echo "==> Creating superuser (if not exists)..."
+    python manage.py shell -c "
 from django.contrib.auth import get_user_model
 import os
 User = get_user_model()
@@ -18,6 +24,13 @@ if not User.objects.filter(username=username).exists():
 else:
     print(f'Superuser \"{username}\" already exists — skipping.')
 "
+fi
+
+# Se argumentos foram passados (ex: celery -A config worker ...), executa-os
+if [ $# -gt 0 ]; then
+    echo "==> Executing: $*"
+    exec "$@"
+fi
 
 echo "==> Starting Gunicorn..."
 

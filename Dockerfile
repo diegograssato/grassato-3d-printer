@@ -43,11 +43,11 @@ RUN python manage.py collectstatic --noinput
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Usuário sem privilégios + diretório gravável para SQLite (dev/CI)
+# Usuário sem privilégios + diretórios graváveis
 RUN addgroup --system appgroup && \
     adduser --system --ingroup appgroup appuser && \
-    mkdir -p /app/data && \ 
-    chown -R appuser:appgroup /app/data
+    mkdir -p /app/data /app/media && \
+    chown -R appuser:appgroup /app/data /app/media
 USER appuser
 
 # SQLite default path (sobrescrito por DB_NAME em prod com MySQL)

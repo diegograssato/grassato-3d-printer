@@ -21,6 +21,7 @@ urlpatterns = [
 
     # ── Categorias ML ─────────────────────────────────────────────────────────
     path('ml/categorias/', views.ml_categorias, name='ml_categorias'),
+    path('ml/categorias/busca/', views.ml_categorias_busca_json, name='ml_categorias_busca'),
     path('ml/category-attributes/', views.ml_category_attributes, name='ml_category_attributes'),
 
     # ── Webhook público (sem login) ───────────────────────────────────────────
