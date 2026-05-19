@@ -6,13 +6,44 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+<div class="d-flex justify-content-between align-items-center mt-3 mb-3">
   <h4 class="mb-0 fw-semibold">
     <i class="bi bi-file-earmark-bar-graph me-2 text-primary"></i>Balancete Mensal
   </h4>
   <a href="{% url 'dashboard:dashboard' %}" class="btn btn-sm btn-outline-secondary">
     <i class="bi bi-arrow-left me-1"></i>Dashboard
   </a>
+</div>
+
+{# ── Filtro de período ── #}
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <input type="hidden" name="per_page" value="{{ per_page }}">
+      <div class="col-sm-3">
+        <label class="form-label small mb-1">De (mês/ano)</label>
+        <input type="month" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label small mb-1">Até (mês/ano)</label>
+        <input type="month" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-auto d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="bi bi-funnel me-1"></i>Filtrar
+        </button>
+        <a href="{% url 'dashboard:balancete' %}" class="btn btn-outline-secondary btn-sm" title="Restaurar padrão (ano atual)">
+          <i class="bi bi-x-lg"></i>
+        </a>
+      </div>
+      <div class="col-auto ms-auto text-end">
+        <div class="text-muted small">Saldo acumulado final</div>
+        <div class="fw-bold {% if saldo_final >= 0 %}text-success{% else %}text-danger{% endif %}">
+          R$ {{ saldo_final|floatformat:2 }}
+        </div>
+      </div>
+    </form>
+  </div>
 </div>
 
 <div class="card">
@@ -47,27 +78,16 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="text-center text-muted py-4">Nenhum dado encontrado.</td></tr>
+        <tr><td colspan="7" class="text-center text-muted py-4">Nenhum dado encontrado para o período.</td></tr>
         {% endfor %}
       </tbody>
-      {% if resumo %}
-      <tfoot class="table-light fw-bold">
-        {% with ultimo=resumo|last %}
-        <tr>
-          <td colspan="4" class="text-end">Saldo acumulado final:</td>
-          <td colspan="3" class="text-end fs-6 {% if ultimo.saldo_acumulado >= 0 %}text-success{% else %}text-danger{% endif %}">
-            R$ {{ ultimo.saldo_acumulado|floatformat:2 }}
-          </td>
-        </tr>
-        {% endwith %}
-      </tfoot>
-      {% endif %}
     </table>
   </div>
+  {% include "partials/pagination.html" %}
 </div>
 
 <p class="text-muted small mt-2">
   <i class="bi bi-info-circle me-1"></i>
-  Exibindo os últimos 12 meses. Entradas incluem vendas e outras receitas. Saídas incluem despesas manuais.
+  Período: {{ data_inicio }} a {{ data_fim }}. Entradas incluem vendas e outras receitas. Saídas incluem despesas manuais.
 </p>
 {% endblock %}

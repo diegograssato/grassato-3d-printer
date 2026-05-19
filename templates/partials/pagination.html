@@ -1,0 +1,69 @@
+{% comment %}
+Partial reutilizável de paginação.
+Requer no contexto: page_obj, query_params, per_page, page_sizes, query_params_base
+{% endcomment %}
+<div class="card-footer bg-white border-top">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 py-1">
+
+    {# ── Seletor de itens por página ── #}
+    <div class="d-flex align-items-center gap-2">
+      <small class="text-muted">Itens/página:</small>
+      <div class="btn-group btn-group-sm">
+        {% for size in page_sizes %}
+        <a href="?{{ query_params_base }}&per_page={{ size }}"
+           class="btn btn-outline-secondary {% if per_page == size %}active{% endif %}">{{ size }}</a>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# ── Info central ── #}
+    <small class="text-muted">
+      Pág. {{ page_obj.number }}/{{ page_obj.paginator.num_pages }}
+      &nbsp;·&nbsp;{{ page_obj.paginator.count }} registro{{ page_obj.paginator.count|pluralize }}
+    </small>
+
+    {# ── Controles de navegação ── #}
+    <nav>
+      <ul class="pagination pagination-sm mb-0">
+        {% if page_obj.has_previous %}
+          <li class="page-item">
+            <a class="page-link" href="?{{ query_params }}&page=1" title="Primeira">&laquo;&laquo;</a>
+          </li>
+          <li class="page-item">
+            <a class="page-link" href="?{{ query_params }}&page={{ page_obj.previous_page_number }}">&laquo;</a>
+          </li>
+        {% else %}
+          <li class="page-item disabled"><span class="page-link">&laquo;&laquo;</span></li>
+          <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+        {% endif %}
+
+        {% for num in page_obj.paginator.page_range %}
+          {% if num == page_obj.number %}
+            <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+          {% elif num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}
+            <li class="page-item">
+              <a class="page-link" href="?{{ query_params }}&page={{ num }}">{{ num }}</a>
+            </li>
+          {% elif num == 1 or num == page_obj.paginator.num_pages %}
+            <li class="page-item">
+              <a class="page-link" href="?{{ query_params }}&page={{ num }}">{{ num }}</a>
+            </li>
+          {% endif %}
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+          <li class="page-item">
+            <a class="page-link" href="?{{ query_params }}&page={{ page_obj.next_page_number }}">&raquo;</a>
+          </li>
+          <li class="page-item">
+            <a class="page-link" href="?{{ query_params }}&page={{ page_obj.paginator.num_pages }}" title="Última">&raquo;&raquo;</a>
+          </li>
+        {% else %}
+          <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+          <li class="page-item disabled"><span class="page-link">&raquo;&raquo;</span></li>
+        {% endif %}
+      </ul>
+    </nav>
+
+  </div>
+</div>

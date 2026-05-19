@@ -1,47 +1,85 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db.models import Sum
 from decimal import Decimal
 from .models import MovimentacaoCaixa
 from .forms import MovimentacaoCaixaForm
 
+PAGE_SIZES = [10, 20, 50, 100, 500, 1000]
+DEFAULT_PAGE_SIZE = 20
+
+
+def _page_size(request):
+    try:
+        s = int(request.GET.get('per_page', DEFAULT_PAGE_SIZE))
+        return s if s in PAGE_SIZES else DEFAULT_PAGE_SIZE
+    except (ValueError, TypeError):
+        return DEFAULT_PAGE_SIZE
+
+
+def _qp(request, *drop):
+    p = request.GET.copy()
+    p.pop('page', None)
+    for k in drop:
+        p.pop(k, None)
+    return p.urlencode()
+
 
 @login_required
 def caixa_list(request):
-    movimentacoes = MovimentacaoCaixa.objects.all()
+    from estoque.models import Fornecedor
 
-    # Filtro por mês
-    mes_str = request.GET.get('mes', '')
+    qs = MovimentacaoCaixa.objects.select_related('fornecedor').order_by('-data', '-criado_em')
+
+    mes_str = request.GET.get('mes', '').strip()
+    tipo_filtro = request.GET.get('tipo', '').strip()
+    categoria_f = request.GET.get('categoria', '').strip()
+    fornecedor_f = request.GET.get('fornecedor', '').strip()
+
     if mes_str:
         try:
             ano, mes = mes_str.split('-')
-            movimentacoes = movimentacoes.filter(data__year=int(ano), data__month=int(mes))
+            qs = qs.filter(data__year=int(ano), data__month=int(mes))
         except (ValueError, AttributeError):
             mes_str = ''
-
-    # Filtro por tipo
-    tipo_filtro = request.GET.get('tipo', '')
     if tipo_filtro in ('ENTRADA', 'SAIDA'):
-        movimentacoes = movimentacoes.filter(tipo=tipo_filtro)
+        qs = qs.filter(tipo=tipo_filtro)
+    if categoria_f:
+        qs = qs.filter(categoria=categoria_f)
+    if fornecedor_f:
+        qs = qs.filter(fornecedor_id=fornecedor_f)
 
-    total_entradas = movimentacoes.filter(tipo='ENTRADA').aggregate(t=Sum('valor'))['t'] or Decimal('0')
-    total_saidas = movimentacoes.filter(tipo='SAIDA').aggregate(t=Sum('valor'))['t'] or Decimal('0')
+    total_entradas = qs.filter(tipo='ENTRADA').aggregate(t=Sum('valor'))['t'] or Decimal('0')
+    total_saidas = qs.filter(tipo='SAIDA').aggregate(t=Sum('valor'))['t'] or Decimal('0')
     saldo = total_entradas - total_saidas
 
-    # Saldo geral (all-time)
     total_entradas_geral = MovimentacaoCaixa.objects.filter(tipo='ENTRADA').aggregate(t=Sum('valor'))['t'] or Decimal('0')
     total_saidas_geral = MovimentacaoCaixa.objects.filter(tipo='SAIDA').aggregate(t=Sum('valor'))['t'] or Decimal('0')
     saldo_geral = total_entradas_geral - total_saidas_geral
 
+    per_page = _page_size(request)
+    paginator = Paginator(qs, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
     return render(request, 'caixa/caixa_list.html', {
-        'movimentacoes': movimentacoes,
+        'page_obj': page_obj,
+        'movimentacoes': page_obj,
         'total_entradas': total_entradas,
         'total_saidas': total_saidas,
         'saldo': saldo,
         'saldo_geral': saldo_geral,
         'mes_filtro': mes_str,
         'tipo_filtro': tipo_filtro,
+        'categoria_f': categoria_f,
+        'fornecedor_f': fornecedor_f,
+        'categorias_opts': MovimentacaoCaixa.CATEGORIA,
+        'fornecedores_opts': Fornecedor.objects.order_by('nome'),
+        'per_page': per_page,
+        'page_sizes': PAGE_SIZES,
+        'query_params': _qp(request),
+        'query_params_base': _qp(request, 'per_page'),
     })
 
 

@@ -1,20 +1,89 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
+from django.db.models import Count, ExpressionWrapper, F, FloatField, Q
 from django.http import JsonResponse
-from django.db.models import Count, Q
 from .models import Filamento, Produto, Fornecedor
 from .forms import FilamentoForm, ProdutoForm, FornecedorForm
+
+PAGE_SIZES = [10, 20, 50, 100, 500, 1000]
+DEFAULT_PAGE_SIZE = 20
+
+
+def _page_size(request):
+    try:
+        s = int(request.GET.get('per_page', DEFAULT_PAGE_SIZE))
+        return s if s in PAGE_SIZES else DEFAULT_PAGE_SIZE
+    except (ValueError, TypeError):
+        return DEFAULT_PAGE_SIZE
+
+
+def _qp(request, *drop):
+    """Query-params sem 'page' e sem as chaves em *drop."""
+    p = request.GET.copy()
+    p.pop('page', None)
+    for k in drop:
+        p.pop(k, None)
+    return p.urlencode()
+
+
+def _is_admin(request):
+    return (
+        request.user.is_superuser
+        or request.user.groups.filter(name='Administradores').exists()
+    )
 
 
 # ==================== Filamentos ====================
 
 @login_required
 def filamento_list(request):
-    filamentos = Filamento.objects.select_related('fornecedor').annotate(
-        num_produtos=Count('produtos', filter=Q(produtos__ativo=True))
-    )
-    return render(request, 'estoque/filamento_list.html', {'filamentos': filamentos})
+    qs = Filamento.objects.select_related('fornecedor').annotate(
+        num_produtos=Count('produtos', filter=Q(produtos__ativo=True)),
+        pct=ExpressionWrapper(
+            100.0 * F('peso_disponivel_g') / F('peso_total_g'),
+            output_field=FloatField(),
+        ),
+    ).order_by('nome')
+
+    busca = request.GET.get('busca', '').strip()
+    material_f = request.GET.get('material', '').strip()
+    fornecedor_f = request.GET.get('fornecedor', '').strip()
+    status_f = request.GET.get('status', '').strip()
+
+    if busca:
+        qs = qs.filter(Q(nome__icontains=busca) | Q(cor__icontains=busca))
+    if material_f:
+        qs = qs.filter(material=material_f)
+    if fornecedor_f:
+        qs = qs.filter(fornecedor_id=fornecedor_f)
+    if status_f == 'Crítico':
+        qs = qs.filter(pct__lte=10)
+    elif status_f == 'Baixo':
+        qs = qs.filter(pct__gt=10, pct__lte=30)
+    elif status_f == 'OK':
+        qs = qs.filter(pct__gt=30)
+
+    per_page = _page_size(request)
+    paginator = Paginator(qs, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    from .models import MATERIAL_CHOICES
+    return render(request, 'estoque/filamento_list.html', {
+        'page_obj': page_obj,
+        'filamentos': page_obj,
+        'fornecedores_opts': Fornecedor.objects.order_by('nome'),
+        'materiais_opts': MATERIAL_CHOICES,
+        'busca': busca,
+        'material_f': material_f,
+        'fornecedor_f': fornecedor_f,
+        'status_f': status_f,
+        'per_page': per_page,
+        'page_sizes': PAGE_SIZES,
+        'query_params': _qp(request),
+        'query_params_base': _qp(request, 'per_page'),
+    })
 
 
 def filamento_create(request):
@@ -72,11 +141,46 @@ def filamento_delete(request, pk):
 
 @login_required
 def produto_list(request):
-    produtos = Produto.objects.select_related('filamento').filter(ativo=True)
-    inativos = Produto.objects.filter(ativo=False).count()
+    is_admin = _is_admin(request)
+
+    # Filtro ativo: padrão "ativo"; admins podem ver inativo ou todos
+    ativo_f = request.GET.get('ativo', 'ativo').strip()
+    if is_admin and ativo_f == 'inativo':
+        qs = Produto.objects.select_related('filamento').filter(ativo=False).order_by('nome')
+    elif is_admin and ativo_f == 'todos':
+        qs = Produto.objects.select_related('filamento').all().order_by('nome')
+    else:
+        qs = Produto.objects.select_related('filamento').filter(ativo=True).order_by('nome')
+        ativo_f = 'ativo'
+
+    busca = request.GET.get('busca', '').strip()
+    material_f = request.GET.get('material', '').strip()
+
+    if busca:
+        qs = qs.filter(Q(nome__icontains=busca) | Q(sku__icontains=busca))
+    if material_f:
+        qs = qs.filter(filamento__material=material_f)
+
+    total_inativos = Produto.objects.filter(ativo=False).count()
+
+    per_page = _page_size(request)
+    paginator = Paginator(qs, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    from .models import MATERIAL_CHOICES
     return render(request, 'estoque/produto_list.html', {
-        'produtos': produtos,
-        'inativos': inativos,
+        'page_obj': page_obj,
+        'produtos': page_obj,
+        'is_admin': is_admin,
+        'ativo_f': ativo_f,
+        'busca': busca,
+        'material_f': material_f,
+        'materiais_opts': MATERIAL_CHOICES,
+        'total_inativos': total_inativos,
+        'per_page': per_page,
+        'page_sizes': PAGE_SIZES,
+        'query_params': _qp(request),
+        'query_params_base': _qp(request, 'per_page'),
     })
 
 
@@ -120,6 +224,21 @@ def produto_delete(request, pk):
 
 
 @login_required
+def produto_toggle_ativo(request, pk):
+    """Reativa (ou desativa) um produto. Exclusivo para Administradores."""
+    if not _is_admin(request):
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied
+    produto = get_object_or_404(Produto, pk=pk)
+    if request.method == 'POST':
+        produto.ativo = not produto.ativo
+        produto.save(update_fields=['ativo'])
+        estado = 'ativado' if produto.ativo else 'desativado'
+        messages.success(request, f'Produto "{produto.nome}" {estado} com sucesso!')
+    return redirect(request.POST.get('next', 'estoque:produto_list'))
+
+
+@login_required
 def produto_preco_api(request, pk):
     """API interna: retorna preço de venda e estoque do produto (usado pelo form de venda)."""
     produto = get_object_or_404(Produto, pk=pk, ativo=True)
@@ -135,11 +254,28 @@ def produto_preco_api(request, pk):
 
 @login_required
 def fornecedor_list(request):
-    fornecedores = Fornecedor.objects.annotate(
+    qs = Fornecedor.objects.annotate(
         num_filamentos=Count('filamentos'),
         num_caixa=Count('movimentacoes_caixa'),
-    )
-    return render(request, 'estoque/fornecedor_list.html', {'fornecedores': fornecedores})
+    ).order_by('nome')
+
+    busca = request.GET.get('busca', '').strip()
+    if busca:
+        qs = qs.filter(Q(nome__icontains=busca) | Q(email__icontains=busca))
+
+    per_page = _page_size(request)
+    paginator = Paginator(qs, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    return render(request, 'estoque/fornecedor_list.html', {
+        'page_obj': page_obj,
+        'fornecedores': page_obj,
+        'busca': busca,
+        'per_page': per_page,
+        'page_sizes': PAGE_SIZES,
+        'query_params': _qp(request),
+        'query_params_base': _qp(request, 'per_page'),
+    })
 
 
 @login_required

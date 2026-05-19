@@ -151,6 +151,7 @@
         <i class="bi bi-plug-fill me-2"></i>Plataformas
       </a>
     </li>
+    {% if is_admin_group %}
     <div class="nav-section">Admin</div>
     <li class="nav-item">
       <a href="{% url 'importexport:index' %}" class="nav-link {% if request.resolver_match.app_name == 'importexport' %}active{% endif %}">
@@ -158,10 +159,16 @@
       </a>
     </li>
     <li class="nav-item">
+      <a href="{% url 'auditoria:log_list' %}" class="nav-link {% if request.resolver_match.app_name == 'auditoria' %}active{% endif %}">
+        <i class="bi bi-shield-lock me-2"></i>Auditoria
+      </a>
+    </li>
+    <li class="nav-item">
       <a href="/admin/" class="nav-link" target="_blank">
         <i class="bi bi-gear me-2"></i>Administração
       </a>
     </li>
+    {% endif %}
   </ul>
 
   {% if user.is_authenticated %}

@@ -14,6 +14,7 @@ urlpatterns = [
     path('produtos/novo/', views.produto_create, name='produto_create'),
     path('produtos/<int:pk>/editar/', views.produto_update, name='produto_update'),
     path('produtos/<int:pk>/excluir/', views.produto_delete, name='produto_delete'),
+    path('produtos/<int:pk>/toggle-ativo/', views.produto_toggle_ativo, name='produto_toggle_ativo'),
     # Fornecedores
     path('fornecedores/', views.fornecedor_list, name='fornecedor_list'),
     path('fornecedores/novo/', views.fornecedor_create, name='fornecedor_create'),

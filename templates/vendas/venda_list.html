@@ -13,26 +13,44 @@
   </a>
 </div>
 
-<!-- Filtro por mês -->
-<div class="card mb-3 p-3">
-  <form method="get" class="row g-2 align-items-end">
-    <div class="col-auto">
-      <label class="form-label small mb-1">Filtrar por mês</label>
-      <input type="month" name="mes" value="{{ mes_filtro }}" class="form-control form-control-sm">
-    </div>
-    <div class="col-auto">
-      <button type="submit" class="btn btn-sm btn-outline-primary">Filtrar</button>
-      {% if mes_filtro %}
-      <a href="{% url 'vendas:venda_list' %}" class="btn btn-sm btn-outline-secondary ms-1">Limpar</a>
+{# ── Filtros ── #}
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <input type="hidden" name="per_page" value="{{ per_page }}">
+      <div class="col-sm-2">
+        <label class="form-label small mb-1">Mês</label>
+        <input type="month" name="mes" value="{{ mes_filtro }}" class="form-control form-control-sm">
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label small mb-1">Produto</label>
+        <input type="text" name="produto" value="{{ produto_f }}" class="form-control form-control-sm" placeholder="nome do produto...">
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label small mb-1">Forma de Pagamento</label>
+        <select name="forma_pagamento" class="form-select form-select-sm">
+          <option value="">Todas</option>
+          {% for val, label in formas_choices %}
+            <option value="{{ val }}" {% if val == forma_f %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-2 d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm w-100">
+          <i class="bi bi-funnel me-1"></i>Filtrar
+        </button>
+        <a href="{% url 'vendas:venda_list' %}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-x-lg"></i>
+        </a>
+      </div>
+      {% if total_valor %}
+      <div class="col-sm-2 text-end">
+        <div class="text-muted small">{{ total_qtd }} unidades</div>
+        <div class="fw-bold text-success small">R$ {{ total_valor|floatformat:2 }}</div>
+      </div>
       {% endif %}
-    </div>
-    {% if total_valor %}
-    <div class="col-auto ms-auto text-end">
-      <div class="text-muted small">{{ total_qtd }} unidades vendidas</div>
-      <div class="fw-bold text-success">Total: R$ {{ total_valor|floatformat:2 }}</div>
-    </div>
-    {% endif %}
-  </form>
+    </form>
+  </div>
 </div>
 
 <div class="card">
@@ -78,5 +96,6 @@
       </tbody>
     </table>
   </div>
+  {% include "partials/pagination.html" %}
 </div>
 {% endblock %}

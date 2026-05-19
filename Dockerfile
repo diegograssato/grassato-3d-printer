@@ -1,14 +1,29 @@
-# ── Stage 1: export requirements via Poetry ────────────────────────────────
+# syntax=docker/dockerfile:1
+
+# ── Stage 1: build Python deps ─────────────────────────────────────────────
 FROM python:3.12-slim AS builder
 
-ENV PIP_NO_CACHE_DIR=1
 WORKDIR /build
 
-RUN pip install poetry==1.8.3
+# gcc + libmysqlclient-dev ficam APENAS no builder (não vão para a imagem final)
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+      default-libmysqlclient-dev \
+      pkg-config \
+      gcc
+
+# Cache de pip persiste entre builds; poetry instalado uma vez
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install poetry==1.8.3
 
 COPY pyproject.toml poetry.lock* ./
-# Exporta sem deps de dev e sem hashes para pip install posterior
 RUN poetry export -f requirements.txt --output requirements.txt --without-hashes --without dev
+
+# Cria venv isolado e instala todas as dependências dentro dele
+RUN python -m venv /venv
+RUN --mount=type=cache,target=/root/.cache/pip \
+    /venv/bin/pip install -r requirements.txt
 
 
 # ── Stage 2: runtime ───────────────────────────────────────────────────────
@@ -16,38 +31,32 @@ FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DJANGO_SETTINGS_MODULE=config.settings
+    DJANGO_SETTINGS_MODULE=config.settings \
+    PATH="/venv/bin:$PATH" \
+    VIRTUAL_ENV=/venv
 
 WORKDIR /app
 
-# Dependências de sistema para mysqlclient
-# gcc/pkg-config são necessários para compilar o cliente; libmariadb3 fica no runtime
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      default-libmysqlclient-dev \
-      libmariadb3 \
-      pkg-config \
-      gcc \
-    && rm -rf /var/lib/apt/lists/*
+# Apenas a lib de runtime (libmariadb3); sem gcc nem compilador
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+      libmariadb3
 
-# Instala dependências Python
-COPY --from=builder /build/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Venv pré-compilado vindo do builder — sem recompilação necessária
+COPY --from=builder /venv /venv
 
-# Copia o código-fonte
+# Código-fonte por último — invalidar cache só quando o código mudar
 COPY . .
+RUN chmod +x /app/entrypoint.sh
 
-# Coleta arquivos estáticos
 RUN python manage.py collectstatic --noinput
-
-# Entrypoint script (migrate + gunicorn)
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
 
 # Usuário sem privilégios + diretórios graváveis
 RUN addgroup --system appgroup && \
     adduser --system --ingroup appgroup appuser && \
     mkdir -p /app/data /app/media && \
-    chown -R appuser:appgroup /app/data /app/media
+    chown -R appuser:appgroup /app/data /app/media /venv
 USER appuser
 
 # SQLite default path (sobrescrito por DB_NAME em prod com MySQL)
@@ -55,4 +64,4 @@ ENV DB_NAME=/app/data/db.sqlite3
 
 EXPOSE 8000
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]

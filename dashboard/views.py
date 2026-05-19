@@ -95,14 +95,49 @@ def dashboard(request):
 def balancete(request):
     from caixa.models import MovimentacaoCaixa
     from vendas.models import Venda
+    from django.core.paginator import Paginator
 
-    meses = _meses_anteriores(12)
+    hoje = date.today()
+    PAGE_SIZES = [10, 20, 50, 100, 500, 1000]
+
+    # ── Intervalo via query params (formato YYYY-MM) ──────────────────────────
+    default_inicio = f'{hoje.year}-01'
+    default_fim = f'{hoje.year}-12'
+
+    inicio_str = request.GET.get('data_inicio', default_inicio).strip()
+    fim_str = request.GET.get('data_fim', default_fim).strip()
+
+    try:
+        y, m = map(int, inicio_str.split('-'))
+        data_inicio = date(y, m, 1)
+    except (ValueError, AttributeError):
+        inicio_str = default_inicio
+        data_inicio = date(hoje.year, 1, 1)
+
+    try:
+        y, m = map(int, fim_str.split('-'))
+        data_fim = date(y, m, 1)
+    except (ValueError, AttributeError):
+        fim_str = default_fim
+        data_fim = date(hoje.year, 12, 1)
+
+    if data_fim < data_inicio:
+        data_fim = data_inicio
+
+    # ── Gera lista de meses no intervalo ─────────────────────────────────────
     MESES_PT = [
         'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
         'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
     ]
 
-    resumo = []
+    meses = []
+    cur = data_inicio
+    while cur <= data_fim:
+        meses.append(cur)
+        cur = _proximo_mes(cur)
+
+    # ── Calcula resumo ────────────────────────────────────────────────────────
+    resumo_all = []
     saldo_acumulado = Decimal('0')
 
     for m in meses:
@@ -124,7 +159,7 @@ def balancete(request):
             data__gte=m, data__lt=prox
         ).aggregate(t=Sum('total'))['t'] or Decimal('0')
 
-        resumo.append({
+        resumo_all.append({
             'mes': m,
             'mes_label': f'{MESES_PT[m.month - 1]}/{m.year}',
             'entradas': entradas,
@@ -135,5 +170,35 @@ def balancete(request):
             'total_vendas': total_vendas,
         })
 
-    context = {'resumo': resumo}
+    # ── Paginação ─────────────────────────────────────────────────────────────
+    try:
+        per_page = int(request.GET.get('per_page', 20))
+        if per_page not in PAGE_SIZES:
+            per_page = 20
+    except (ValueError, TypeError):
+        per_page = 20
+
+    p = request.GET.copy()
+    p.pop('page', None)
+    query_params = p.urlencode()
+    p.pop('per_page', None)
+    query_params_base = p.urlencode()
+
+    paginator = Paginator(resumo_all, per_page)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
+
+    # Saldo acumulado final (sempre do total, não da página)
+    saldo_final = resumo_all[-1]['saldo_acumulado'] if resumo_all else Decimal('0')
+
+    context = {
+        'resumo': page_obj,
+        'page_obj': page_obj,
+        'saldo_final': saldo_final,
+        'data_inicio': inicio_str,
+        'data_fim': fim_str,
+        'per_page': per_page,
+        'page_sizes': PAGE_SIZES,
+        'query_params': query_params,
+        'query_params_base': query_params_base,
+    }
     return render(request, 'dashboard/balancete.html', context)

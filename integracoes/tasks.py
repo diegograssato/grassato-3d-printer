@@ -83,10 +83,12 @@ def processar_pedido_ml(self, integracao_pk: int, order_id: str) -> dict:
     - Cria Venda no sistema
     - Decrementa estoque via signal
     - Lança no caixa via signal
+    - Registra evento de auditoria com JSON bruto do pedido
     """
     from .models import Integracao, ProdutoIntegracao
     from .services.mercadolivre import MercadoLivreService
     from vendas.models import Venda
+    from auditoria.middleware import set_integration_context, clear_integration_context
 
     logger.info(
         'processar_pedido_ml: iniciando order_id=%s integracao_pk=%s',
@@ -102,57 +104,72 @@ def processar_pedido_ml(self, integracao_pk: int, order_id: str) -> dict:
         )
         return {'ok': False, 'error': 'Integração não encontrada'}
 
-    ml_service = MercadoLivreService()
-    order = ml_service.get_order(integracao, order_id)
+    # Configura contexto de auditoria para identificar a origem como integração ML
+    set_integration_context('ML', f'MercadoLivre — {integracao.nome}')
 
-    if not order:
-        logger.warning('processar_pedido_ml: order %s não encontrado no ML', order_id)
-        return {'ok': False, 'error': 'Pedido não encontrado na API do ML'}
+    try:
+        ml_service = MercadoLivreService()
+        order = ml_service.get_order(integracao, order_id)
 
-    status = order.get('status', '')
-    if status not in ('paid', 'payment_required'):
-        logger.info(
-            'processar_pedido_ml: order %s status=%s — ignorado', order_id, status
-        )
-        return {'ok': True, 'skipped': True, 'status': status}
+        if not order:
+            logger.warning('processar_pedido_ml: order %s não encontrado no ML', order_id)
+            return {'ok': False, 'error': 'Pedido não encontrado na API do ML'}
 
-    vendas_criadas = []
-    for order_item in order.get('order_items', []):
-        item_id = order_item.get('item', {}).get('id', '')
-        quantity = int(order_item.get('quantity', 1))
-        unit_price = Decimal(str(order_item.get('unit_price', 0)))
-
-        try:
-            pi = ProdutoIntegracao.objects.select_related('produto').get(
-                sku_externo=item_id, integracao=integracao
+        status = order.get('status', '')
+        if status not in ('paid', 'payment_required'):
+            logger.info(
+                'processar_pedido_ml: order %s status=%s — ignorado', order_id, status
             )
-        except ProdutoIntegracao.DoesNotExist:
-            logger.warning(
-                'processar_pedido_ml: item %s do order %s não mapeado no sistema',
-                item_id,
+            return {'ok': True, 'skipped': True, 'status': status}
+
+        vendas_criadas = []
+        for order_item in order.get('order_items', []):
+            item_id = order_item.get('item', {}).get('id', '')
+            quantity = int(order_item.get('quantity', 1))
+            unit_price = Decimal(str(order_item.get('unit_price', 0)))
+
+            try:
+                pi = ProdutoIntegracao.objects.select_related('produto').get(
+                    sku_externo=item_id, integracao=integracao
+                )
+            except ProdutoIntegracao.DoesNotExist:
+                logger.warning(
+                    'processar_pedido_ml: item %s do order %s não mapeado no sistema',
+                    item_id,
+                    order_id,
+                )
+                continue
+
+            # O signal vendas.signals.venda_post_save cuida do caixa e do estoque.
+            # O AuditLog será gravado pelo signal post_save de Venda com event_json do pedido.
+            from auditoria.signals import _write_log as _audit_write
+            venda = Venda.objects.create(
+                produto=pi.produto,
+                quantidade=quantity,
+                preco_unitario=unit_price,
+                data=timezone.now().date(),
+                forma_pagamento='CARTAO_CREDITO',
+                observacoes=f'Venda via MercadoLivre — pedido #{order_id}',
+            )
+            # Grava log extra com JSON bruto do pedido ML
+            try:
+                _audit_write('CRIADO', venda, event_json=order)
+            except Exception:
+                pass
+
+            vendas_criadas.append(venda.pk)
+            logger.info(
+                'processar_pedido_ml: venda=%s criada — produto=%s qtd=%d order=%s',
+                venda.pk,
+                pi.produto,
+                quantity,
                 order_id,
             )
-            continue
 
-        # O signal vendas.signals.venda_post_save cuida do caixa e do estoque
-        venda = Venda.objects.create(
-            produto=pi.produto,
-            quantidade=quantity,
-            preco_unitario=unit_price,
-            data=timezone.now().date(),
-            forma_pagamento='CARTAO_CREDITO',
-            observacoes=f'Venda via MercadoLivre — pedido #{order_id}',
-        )
-        vendas_criadas.append(venda.pk)
-        logger.info(
-            'processar_pedido_ml: venda=%s criada — produto=%s qtd=%d order=%s',
-            venda.pk,
-            pi.produto,
-            quantity,
-            order_id,
-        )
+        return {'ok': True, 'order_id': order_id, 'vendas': vendas_criadas}
 
-    return {'ok': True, 'order_id': order_id, 'vendas': vendas_criadas}
+    finally:
+        clear_integration_context()
 
 
 # ── Fila: ml_status ───────────────────────────────────────────────────────────

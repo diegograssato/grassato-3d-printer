@@ -17,13 +17,13 @@
 <div class="row g-3 mb-3">
   <div class="col-md-4">
     <div class="card card-metric green p-3">
-      <div class="text-muted small">Entradas {% if mes_filtro %}(filtro){% else %}(período){% endif %}</div>
+      <div class="text-muted small">Entradas (período filtrado)</div>
       <div class="fs-5 fw-bold text-success">R$ {{ total_entradas|floatformat:2 }}</div>
     </div>
   </div>
   <div class="col-md-4">
     <div class="card card-metric red p-3">
-      <div class="text-muted small">Saídas {% if mes_filtro %}(filtro){% else %}(período){% endif %}</div>
+      <div class="text-muted small">Saídas (período filtrado)</div>
       <div class="fs-5 fw-bold text-danger">R$ {{ total_saidas|floatformat:2 }}</div>
     </div>
   </div>
@@ -38,37 +38,57 @@
 </div>
 
 <!-- Filtros -->
-<div class="card mb-3 p-3">
-  <form method="get" class="row g-2 align-items-end">
-    <div class="col-auto">
-      <label class="form-label small mb-1">Mês</label>
-      <input type="month" name="mes" value="{{ mes_filtro }}" class="form-control form-control-sm">
-    </div>
-    <div class="col-auto">
-      <label class="form-label small mb-1">Tipo</label>
-      <select name="tipo" class="form-select form-select-sm">
-        <option value="">Todos</option>
-        <option value="ENTRADA" {% if tipo_filtro == "ENTRADA" %}selected{% endif %}>Entradas</option>
-        <option value="SAIDA" {% if tipo_filtro == "SAIDA" %}selected{% endif %}>Saídas</option>
-      </select>
-    </div>
-    <div class="col-auto">
-      <button type="submit" class="btn btn-sm btn-outline-primary">Filtrar</button>
-      {% if mes_filtro or tipo_filtro %}
-      <a href="{% url 'caixa:caixa_list' %}" class="btn btn-sm btn-outline-secondary ms-1">Limpar</a>
-      {% endif %}
-    </div>
-    {% if mes_filtro %}
-    <div class="col-auto ms-auto text-end">
-      <div class="small">
-        Saldo do período:
-        <strong class="{% if saldo >= 0 %}text-success{% else %}text-danger{% endif %}">
-          R$ {{ saldo|floatformat:2 }}
-        </strong>
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <input type="hidden" name="per_page" value="{{ per_page }}">
+      <div class="col-sm-2">
+        <label class="form-label small mb-1">Mês</label>
+        <input type="month" name="mes" value="{{ mes_filtro }}" class="form-control form-control-sm">
       </div>
-    </div>
-    {% endif %}
-  </form>
+      <div class="col-sm-2">
+        <label class="form-label small mb-1">Tipo</label>
+        <select name="tipo" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          <option value="ENTRADA" {% if tipo_filtro == "ENTRADA" %}selected{% endif %}>Entradas</option>
+          <option value="SAIDA" {% if tipo_filtro == "SAIDA" %}selected{% endif %}>Saídas</option>
+        </select>
+      </div>
+      <div class="col-sm-2">
+        <label class="form-label small mb-1">Categoria</label>
+        <select name="categoria" class="form-select form-select-sm">
+          <option value="">Todas</option>
+          {% for val, label in categorias_opts %}
+            <option value="{{ val }}" {% if val == categoria_f %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label small mb-1">Fornecedor</label>
+        <select name="fornecedor" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          {% for forn in fornecedores_opts %}
+            <option value="{{ forn.pk }}" {% if forn.pk|stringformat:"s" == fornecedor_f %}selected{% endif %}>{{ forn.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-3 d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm w-100">
+          <i class="bi bi-funnel me-1"></i>Filtrar
+        </button>
+        <a href="{% url 'caixa:caixa_list' %}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-x-lg"></i>
+        </a>
+      </div>
+      {% if mes_filtro %}
+      <div class="col-12 text-end">
+        <small class="text-muted">Saldo do período:
+          <strong class="{% if saldo >= 0 %}text-success{% else %}text-danger{% endif %}">R$ {{ saldo|floatformat:2 }}</strong>
+        </small>
+      </div>
+      {% endif %}
+    </form>
+  </div>
 </div>
 
 <!-- Tabela -->
@@ -126,5 +146,6 @@
       </tbody>
     </table>
   </div>
+  {% include "partials/pagination.html" %}
 </div>
 {% endblock %}

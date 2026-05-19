@@ -8,6 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 
+from auditoria.decorators import admin_group_required
 from estoque.models import Filamento, Fornecedor, Produto
 
 # ──────────────────────────────────────────────
@@ -258,12 +259,12 @@ def _process_csv_content(content: str, filename: str = ''):
 # ──────────────────────────────────────────────
 # Views
 # ──────────────────────────────────────────────
-@login_required
+@admin_group_required
 def index(request):
     return render(request, 'importexport/index.html')
 
 
-@login_required
+@admin_group_required
 def exportar(request):
     if request.method != 'POST':
         return redirect('importexport:index')
@@ -298,7 +299,7 @@ def exportar(request):
     return response
 
 
-@login_required
+@admin_group_required
 def importar(request):
     if request.method != 'POST':
         return redirect('importexport:index')

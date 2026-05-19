@@ -6,11 +6,32 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+<div class="d-flex justify-content-between align-items-center mt-3 mb-3">
   <h4 class="mb-0 fw-semibold"><i class="bi bi-truck me-2 text-primary"></i>Fornecedores</h4>
   <a href="{% url 'estoque:fornecedor_create' %}" class="btn btn-primary btn-sm">
     <i class="bi bi-plus-lg me-1"></i>Novo Fornecedor
   </a>
+</div>
+
+{# ── Filtros ── #}
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <input type="hidden" name="per_page" value="{{ per_page }}">
+      <div class="col-sm-4">
+        <label class="form-label small mb-1">Busca (nome/e-mail)</label>
+        <input type="text" name="busca" value="{{ busca }}" class="form-control form-control-sm" placeholder="buscar...">
+      </div>
+      <div class="col-auto d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="bi bi-funnel me-1"></i>Filtrar
+        </button>
+        <a href="{% url 'estoque:fornecedor_list' %}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-x-lg"></i>
+        </a>
+      </div>
+    </form>
+  </div>
 </div>
 
 <div class="card">
@@ -66,12 +87,13 @@
         {% empty %}
         <tr>
           <td colspan="7" class="text-center text-muted py-4">
-            Nenhum fornecedor cadastrado. <a href="{% url 'estoque:fornecedor_create' %}">Cadastrar agora</a>
+            Nenhum fornecedor encontrado. <a href="{% url 'estoque:fornecedor_create' %}">Cadastrar agora</a>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% include "partials/pagination.html" %}
 </div>
 {% endblock %}

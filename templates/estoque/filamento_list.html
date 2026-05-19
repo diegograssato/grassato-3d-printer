@@ -6,11 +6,59 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+<div class="d-flex justify-content-between align-items-center mt-3 mb-3">
   <h4 class="mb-0 fw-semibold"><i class="bi bi-archive me-2 text-primary"></i>Estoque de Filamentos</h4>
   <a href="{% url 'estoque:filamento_create' %}" class="btn btn-primary btn-sm">
     <i class="bi bi-plus-lg me-1"></i>Novo Filamento
   </a>
+</div>
+
+{# ── Filtros ── #}
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <input type="hidden" name="per_page" value="{{ per_page }}">
+      <div class="col-sm-3">
+        <label class="form-label small mb-1">Busca (nome/cor)</label>
+        <input type="text" name="busca" value="{{ busca }}" class="form-control form-control-sm" placeholder="buscar...">
+      </div>
+      <div class="col-sm-2">
+        <label class="form-label small mb-1">Material</label>
+        <select name="material" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          {% for val, label in materiais_opts %}
+            <option value="{{ val }}" {% if val == material_f %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-2">
+        <label class="form-label small mb-1">Fornecedor</label>
+        <select name="fornecedor" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          {% for forn in fornecedores_opts %}
+            <option value="{{ forn.pk }}" {% if forn.pk|stringformat:"s" == fornecedor_f %}selected{% endif %}>{{ forn.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-2">
+        <label class="form-label small mb-1">Status estoque</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          <option value="OK" {% if status_f == "OK" %}selected{% endif %}>OK</option>
+          <option value="Baixo" {% if status_f == "Baixo" %}selected{% endif %}>Baixo</option>
+          <option value="Crítico" {% if status_f == "Crítico" %}selected{% endif %}>Crítico</option>
+        </select>
+      </div>
+      <div class="col-sm-3 d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm w-100">
+          <i class="bi bi-funnel me-1"></i>Filtrar
+        </button>
+        <a href="{% url 'estoque:filamento_list' %}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-x-lg"></i>
+        </a>
+      </div>
+    </form>
+  </div>
 </div>
 
 <div class="card">
@@ -72,12 +120,13 @@
         {% empty %}
         <tr>
           <td colspan="8" class="text-center text-muted py-4">
-            Nenhum filamento cadastrado. <a href="{% url 'estoque:filamento_create' %}">Cadastrar agora</a>
+            Nenhum filamento encontrado. <a href="{% url 'estoque:filamento_create' %}">Cadastrar agora</a>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% include "partials/pagination.html" %}
 </div>
 {% endblock %}

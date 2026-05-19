@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Logs de Auditoria{% endblock %}
+
+{% block extra_css %}
+<style>
+  .badge-CRIADO    { background-color: #198754; }
+  .badge-ATUALIZADO{ background-color: #ffc107; color: #212529; }
+  .badge-EXCLUIDO  { background-color: #dc3545; }
+  .font-mono { font-family: 'Courier New', monospace; font-size: .78rem; }
+  pre.json-viewer {
+    background:#1e1e2e; color:#cdd6f4; border-radius:.5rem;
+    padding:1rem; max-height:400px; overflow:auto; font-size:.75rem;
+  }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+  <li class="breadcrumb-item active">Auditoria</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h4 class="page-title mb-0"><i class="bi bi-shield-lock me-2 text-primary"></i>Logs de Auditoria</h4>
+  <span class="badge bg-secondary">{{ logs.paginator.count }} registro{{ logs.paginator.count|pluralize:"s" }}</span>
+</div>
+
+{# ── Filtros ── #}
+<div class="card mb-4">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-sm-3">
+        <label class="form-label small mb-1">Modelo</label>
+        <select name="modelo" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          {% for m in modelos %}
+            <option value="{{ m }}" {% if m == modelo_filter %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-2">
+        <label class="form-label small mb-1">Ação</label>
+        <select name="acao" class="form-select form-select-sm">
+          <option value="">Todas</option>
+          {% for val, label in acoes %}
+            <option value="{{ val }}" {% if val == acao_filter %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-2">
+        <label class="form-label small mb-1">Plataforma</label>
+        <select name="plataforma" class="form-select form-select-sm">
+          <option value="">Todas</option>
+          {% for val, label in plataformas %}
+            {% if val %}
+              <option value="{{ val }}" {% if val == plataforma_filter %}selected{% endif %}>{{ label }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label small mb-1">Usuário / Origem</label>
+        <input type="text" name="usuario" class="form-control form-control-sm"
+               placeholder="buscar..." value="{{ usuario_filter }}">
+      </div>
+      <div class="col-sm-2 d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm w-100">
+          <i class="bi bi-funnel me-1"></i>Filtrar
+        </button>
+        <a href="{% url 'auditoria:log_list' %}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-x-lg"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ── Tabela ── #}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th style="width:140px">Data/Hora</th>
+          <th style="width:90px">Ação</th>
+          <th>Modelo</th>
+          <th style="width:60px">ID</th>
+          <th>Representação</th>
+          <th>Usuário / Origem</th>
+          <th style="width:100px">Plataforma</th>
+          <th style="width:60px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td class="font-mono text-muted small">{{ log.timestamp|date:"d/m/Y H:i:s" }}</td>
+          <td>
+            <span class="badge badge-{{ log.acao }} rounded-pill px-2">
+              {{ log.get_acao_display }}
+            </span>
+          </td>
+          <td class="font-mono small">{{ log.modelo }}</td>
+          <td class="text-center font-mono small">{{ log.objeto_id }}</td>
+          <td class="small text-truncate" style="max-width:200px" title="{{ log.objeto_repr }}">
+            {{ log.objeto_repr|truncatechars:60 }}
+          </td>
+          <td class="small">
+            {% if log.usuario %}
+              <i class="bi bi-person-fill text-info me-1"></i>{{ log.usuario_nome }}
+            {% else %}
+              <i class="bi bi-plug-fill text-warning me-1"></i>{{ log.usuario_nome }}
+            {% endif %}
+          </td>
+          <td class="small">
+            {% if log.plataforma %}
+              <span class="badge bg-info text-dark">{{ log.plataforma_label }}</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if log.changes or log.event_json %}
+            <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                    onclick="verDetalhes({{ log.pk }})"
+                    title="Ver detalhes">
+              <i class="bi bi-braces"></i>
+            </button>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8" class="text-center text-muted py-4">
+            <i class="bi bi-inbox fs-3 d-block mb-1"></i>
+            Nenhum registro encontrado.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# Paginação #}
+  {% include "partials/pagination.html" %}
+</div>
+
+{# ── Modal de detalhes ── #}
+<div class="modal fade" id="modalDetalhes" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="bi bi-braces me-2"></i>Detalhes do Evento</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <div class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function verDetalhes(pk) {
+  const modal = new bootstrap.Modal(document.getElementById('modalDetalhes'));
+  document.getElementById('modalBody').innerHTML =
+    '<div class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></div>';
+  modal.show();
+
+  fetch(`/auditoria/${pk}/json/`)
+    .then(r => r.json())
+    .then(data => {
+      let html = `
+        <dl class="row small mb-3">
+          <dt class="col-sm-3">Data/Hora</dt><dd class="col-sm-9">${data.timestamp}</dd>
+          <dt class="col-sm-3">Ação</dt><dd class="col-sm-9">${data.acao}</dd>
+          <dt class="col-sm-3">Modelo</dt><dd class="col-sm-9 font-monospace">${data.modelo}</dd>
+          <dt class="col-sm-3">Objeto</dt><dd class="col-sm-9">#${data.objeto_id} — ${data.objeto_repr}</dd>
+          <dt class="col-sm-3">Usuário</dt><dd class="col-sm-9">${data.usuario_nome}</dd>
+          <dt class="col-sm-3">Plataforma</dt><dd class="col-sm-9">${data.plataforma}</dd>
+        </dl>`;
+
+      if (data.changes && Object.keys(data.changes).length > 0) {
+        html += `<p class="fw-semibold small mb-1"><i class="bi bi-pencil-square me-1"></i>Alterações</p>
+                 <pre class="json-viewer">${JSON.stringify(data.changes, null, 2)}</pre>`;
+      }
+      if (data.event_json) {
+        html += `<p class="fw-semibold small mb-1 mt-3"><i class="bi bi-cloud-download me-1"></i>JSON do Evento (Integração)</p>
+                 <pre class="json-viewer">${JSON.stringify(data.event_json, null, 2)}</pre>`;
+      }
+
+      document.getElementById('modalBody').innerHTML = html;
+    })
+    .catch(() => {
+      document.getElementById('modalBody').innerHTML =
+        '<p class="text-danger">Erro ao carregar detalhes.</p>';
+    });
+}
+</script>
+{% endblock %}
