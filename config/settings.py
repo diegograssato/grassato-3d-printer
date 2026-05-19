@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'caixa.apps.CaixaConfig',
     'dashboard.apps.DashboardConfig',
     'integracoes.apps.IntegracoesConfig',
+    'importexport.apps.ImportExportConfig',
 ]
 
 MIDDLEWARE = [

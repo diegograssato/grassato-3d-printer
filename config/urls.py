@@ -12,6 +12,7 @@ urlpatterns = [
     path('vendas/', include('vendas.urls')),
     path('caixa/', include('caixa.urls')),
     path('integracoes/', include('integracoes.urls')),
+    path('importexport/', include('importexport.urls')),
 ]
 
 # Serve arquivos de mídia localmente em qualquer ambiente

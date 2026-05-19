@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Importar / Exportar{% endblock %}
+
+{% block breadcrumb %}
+  <li class="breadcrumb-item active">Importar / Exportar</li>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+
+  {# ── EXPORTAR ── #}
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center gap-2 bg-white border-bottom">
+        <i class="bi bi-cloud-download-fill text-primary fs-5"></i>
+        <span class="fw-semibold">Exportar dados (CSV)</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Selecione os itens que deseja exportar. O atrelamento entre entidades
+          (Filamento → Fornecedor, Produto → Filamento) é preservado nos arquivos gerados.<br>
+          Se selecionar mais de um tipo, o download será um arquivo <strong>.zip</strong>.
+        </p>
+        <form method="post" action="{% url 'importexport:exportar' %}">
+          {% csrf_token %}
+          <div class="mb-3">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" name="tipos" value="fornecedores" id="chkFornecedores" checked>
+              <label class="form-check-label" for="chkFornecedores">
+                <i class="bi bi-truck me-1 text-secondary"></i>Fornecedores
+              </label>
+            </div>
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" name="tipos" value="filamentos" id="chkFilamentos" checked>
+              <label class="form-check-label" for="chkFilamentos">
+                <i class="bi bi-archive me-1 text-secondary"></i>Filamentos
+              </label>
+            </div>
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" name="tipos" value="produtos" id="chkProdutos" checked>
+              <label class="form-check-label" for="chkProdutos">
+                <i class="bi bi-box-seam me-1 text-secondary"></i>Produtos
+              </label>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-download me-1"></i>Baixar exportação
+          </button>
+        </form>
+      </div>
+
+      {# Cabeçalhos de referência #}
+      <div class="card-footer bg-white border-top small text-muted">
+        <p class="mb-1 fw-semibold">Cabeçalhos dos arquivos gerados:</p>
+        <div class="mb-1">
+          <span class="badge bg-secondary me-1">fornecedores.csv</span>
+          <code>nome, telefone, email, site, observacoes</code>
+        </div>
+        <div class="mb-1">
+          <span class="badge bg-secondary me-1">filamentos.csv</span>
+          <code>nome, cor, material, peso_total_g, peso_disponivel_g, preco_por_kg, fornecedor_nome</code>
+        </div>
+        <div>
+          <span class="badge bg-secondary me-1">produtos.csv</span>
+          <code>nome, descricao, filamento_nome, filamento_cor, filamento_material, peso_filamento_g, comprimento_filamento_m, tempo_impressao_horas, preco_custo, preco_venda, estoque_quantidade, ativo</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── IMPORTAR ── #}
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center gap-2 bg-white border-bottom">
+        <i class="bi bi-cloud-upload-fill text-success fs-5"></i>
+        <span class="fw-semibold">Importar dados (CSV / ZIP)</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Envie um arquivo <strong>.csv</strong> (um tipo por arquivo) ou um <strong>.zip</strong>
+          contendo múltiplos CSVs. O tipo é detectado automaticamente pelo cabeçalho.<br>
+          A importação respeita a ordem: Fornecedores → Filamentos → Produtos,
+          garantindo a integridade dos vínculos.
+        </p>
+        <form method="post" action="{% url 'importexport:importar' %}" enctype="multipart/form-data">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label for="arquivo" class="form-label fw-semibold">Arquivo (.csv ou .zip)</label>
+            <input class="form-control" type="file" id="arquivo" name="arquivo"
+                   accept=".csv,.zip" required>
+            <div class="form-text">
+              Registros existentes (mesmo nome/identificador) serão <strong>atualizados</strong>.
+              Fornecedores e Filamentos ausentes na base serão criados automaticamente quando referenciados.
+            </div>
+          </div>
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-upload me-1"></i>Importar
+          </button>
+        </form>
+      </div>
+
+      <div class="card-footer bg-white border-top small text-muted">
+        <p class="mb-1 fw-semibold"><i class="bi bi-info-circle me-1"></i>Regras de atrelamento na importação:</p>
+        <ul class="mb-0 ps-3">
+          <li><strong>Filamentos</strong> → vinculados ao fornecedor pelo campo <code>fornecedor_nome</code> (criado se não existir).</li>
+          <li><strong>Produtos</strong> → vinculados ao filamento pelo conjunto <code>filamento_nome + filamento_cor + filamento_material</code> (deve existir).</li>
+          <li>Use <strong>exportar primeiro</strong> para obter modelos de CSV com o formato correto.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

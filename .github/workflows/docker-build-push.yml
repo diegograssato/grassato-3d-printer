@@ -155,21 +155,27 @@ jobs:
           fi
           
           echo "🚀 Atualizando o Swarm com a imagem: $SHA_TAG"
-          
-          # 2. Atualiza o serviço específico dentro da stack "makers"
-          # Substitua 'makers_app' pelo nome real do serviço definido no seu docker-compose.yml
-          docker service update \
-            --image "$SHA_TAG" \
-            --with-registry-auth \
-            makers_app   
-          docker service update \
-            --image "$SHA_TAG" \
-            --with-registry-auth \
-            makers_celery    
-          docker service update \
-            --image "$SHA_TAG" \
-            --with-registry-auth \
-            makers_flower                            
+
+          # 2. Atualiza todos os serviços da stack em loop
+          FAILED=0
+          for srv in makers_app makers_celery makers_flower; do
+            echo "  → atualizando $srv ..."
+            if docker service update \
+                --image "$SHA_TAG" \
+                --with-registry-auth \
+                "$srv"; then
+              echo "  ✅ $srv atualizado"
+            else
+              echo "  ❌ falha ao atualizar $srv (exit $?)"
+              FAILED=$((FAILED + 1))
+            fi
+          done
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo "❌ $FAILED serviço(s) falharam na atualização."
+            exit 1
+          fi
+          echo "✅ Todos os serviços atualizados com sucesso."
 
       # ── 11. Limpeza de discos no Runner ────────────────────────────────
       - name: Cleanup old Docker images
