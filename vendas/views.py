@@ -76,23 +76,31 @@ def venda_create(request):
     if form.is_valid():
         produto = form.cleaned_data['produto']
         quantidade = form.cleaned_data['quantidade']
-        peso_necessario = produto.peso_filamento_g * Decimal(str(quantidade))
 
         if produto.estoque_quantidade < quantidade:
             messages.error(
                 request,
                 f'Estoque insuficiente! Disponível: {produto.estoque_quantidade} un.'
             )
-        elif produto.filamento.peso_disponivel_g < peso_necessario:
-            messages.error(
-                request,
-                f'Filamento insuficiente! Disponível: {produto.filamento.peso_disponivel_g:.0f}g, '
-                f'necessário: {peso_necessario:.0f}g.'
-            )
         else:
-            form.save()
-            messages.success(request, 'Venda registrada! Estoque e caixa atualizados automaticamente.')
-            return redirect('vendas:venda_list')
+            filamento_insuficiente = None
+            for pf in produto.filamentos_produto.select_related('filamento').all():
+                peso_necessario = pf.peso_filamento_g * Decimal(str(quantidade))
+                if pf.filamento.peso_disponivel_g < peso_necessario:
+                    filamento_insuficiente = (pf.filamento, pf.filamento.peso_disponivel_g, peso_necessario)
+                    break
+
+            if filamento_insuficiente:
+                fil, disponivel, necessario = filamento_insuficiente
+                messages.error(
+                    request,
+                    f'Filamento insuficiente! {fil}: disponível {disponivel:.0f}g, '
+                    f'necessário {necessario:.0f}g.'
+                )
+            else:
+                form.save()
+                messages.success(request, 'Venda registrada! Estoque e caixa atualizados automaticamente.')
+                return redirect('vendas:venda_list')
 
     return render(request, 'vendas/venda_form.html', {'form': form, 'titulo': 'Nova Venda'})
 

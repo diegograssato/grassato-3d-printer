@@ -57,7 +57,7 @@ services:
         condition: service_healthy
     environment:
       SECRET_KEY: ${SECRET_KEY:-insecure-key-change-me}
-      DEBUG: "False"
+      DEBUG: "True"
       ALLOWED_HOSTS: "localhost,127.0.0.1,7b79-45-163-174-187.ngrok-free.app"
       CSRF_TRUSTED_ORIGINS: "http://localhost,http://localhost:8000,https://7b79-45-163-174-187.ngrok-free.app"
       ML_CALLBACK_URI: "https://7b79-45-163-174-187.ngrok-free.app/integracoes/ml/callback/"

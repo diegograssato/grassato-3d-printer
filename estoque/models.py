@@ -90,20 +90,6 @@ class Filamento(models.Model):
 class Produto(models.Model):
     nome = models.CharField('Nome', max_length=150)
     descricao = models.TextField('Descrição', blank=True)
-    filamento = models.ForeignKey(
-        Filamento, on_delete=models.PROTECT,
-        related_name='produtos', verbose_name='Filamento'
-    )
-    peso_filamento_g = models.DecimalField(
-        'Peso filamento/unidade (g)', max_digits=8, decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.01'))],
-        help_text='Gramas de filamento consumidos por peça impressa'
-    )
-    comprimento_filamento_m = models.DecimalField(
-        'Comprimento filamento/unidade (m)', max_digits=8, decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.01'))],
-        help_text='Metros de filamento consumidos por peça'
-    )
     tempo_impressao_horas = models.DecimalField(
         'Tempo de impressão (h)', max_digits=6, decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))]
@@ -153,4 +139,51 @@ class Produto(models.Model):
 
     @property
     def custo_filamento(self):
-        return self.filamento.preco_por_grama * self.peso_filamento_g
+        return sum(
+            pf.filamento.preco_por_grama * pf.peso_filamento_g
+            for pf in self.filamentos_produto.select_related('filamento').all()
+        )
+
+    @property
+    def filamento_principal(self):
+        """Retorna o primeiro filamento cadastrado (compatibilidade)."""
+        pf = self.filamentos_produto.select_related('filamento').first()
+        return pf.filamento if pf else None
+
+    @property
+    def peso_filamento_total_g(self):
+        """Soma de gramas de todos os filamentos por peça."""
+        return sum(
+            pf.peso_filamento_g for pf in self.filamentos_produto.all()
+        ) or Decimal('0')
+
+
+class ProdutoFilamento(models.Model):
+    produto = models.ForeignKey(
+        Produto, on_delete=models.CASCADE,
+        related_name='filamentos_produto',
+        verbose_name='Produto',
+    )
+    filamento = models.ForeignKey(
+        Filamento, on_delete=models.PROTECT,
+        related_name='produto_filamentos',
+        verbose_name='Filamento',
+    )
+    peso_filamento_g = models.DecimalField(
+        'Peso (g)', max_digits=8, decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        help_text='Gramas de filamento por peça',
+    )
+    comprimento_filamento_m = models.DecimalField(
+        'Comprimento (m)', max_digits=8, decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        help_text='Metros de filamento por peça',
+    )
+
+    class Meta:
+        verbose_name = 'Filamento do Produto'
+        verbose_name_plural = 'Filamentos do Produto'
+        ordering = ['pk']
+
+    def __str__(self):
+        return f'{self.filamento} — {self.peso_filamento_g}g'

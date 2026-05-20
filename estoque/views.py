@@ -4,8 +4,8 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, ExpressionWrapper, F, FloatField, Q
 from django.http import JsonResponse
-from .models import Filamento, Produto, Fornecedor
-from .forms import FilamentoForm, ProdutoForm, FornecedorForm
+from .models import Filamento, Produto, ProdutoFilamento, Fornecedor
+from .forms import FilamentoForm, ProdutoForm, ProdutoFilamentoFormSet, FornecedorForm
 
 PAGE_SIZES = [10, 20, 50, 100, 500, 1000]
 DEFAULT_PAGE_SIZE = 20
@@ -40,7 +40,7 @@ def _is_admin(request):
 @login_required
 def filamento_list(request):
     qs = Filamento.objects.select_related('fornecedor').annotate(
-        num_produtos=Count('produtos', filter=Q(produtos__ativo=True)),
+        num_produtos=Count('produto_filamentos__produto', filter=Q(produto_filamentos__produto__ativo=True), distinct=True),
         pct=ExpressionWrapper(
             100.0 * F('peso_disponivel_g') / F('peso_total_g'),
             output_field=FloatField(),
@@ -162,11 +162,11 @@ def produto_list(request):
     # Filtro ativo: padrão "ativo"; admins podem ver inativo ou todos
     ativo_f = request.GET.get('ativo', 'ativo').strip()
     if is_admin and ativo_f == 'inativo':
-        qs = Produto.objects.select_related('filamento').filter(ativo=False).order_by('nome')
+        qs = Produto.objects.prefetch_related('filamentos_produto__filamento').filter(ativo=False).order_by('nome')
     elif is_admin and ativo_f == 'todos':
-        qs = Produto.objects.select_related('filamento').all().order_by('nome')
+        qs = Produto.objects.prefetch_related('filamentos_produto__filamento').all().order_by('nome')
     else:
-        qs = Produto.objects.select_related('filamento').filter(ativo=True).order_by('nome')
+        qs = Produto.objects.prefetch_related('filamentos_produto__filamento').filter(ativo=True).order_by('nome')
         ativo_f = 'ativo'
 
     busca = request.GET.get('busca', '').strip()
@@ -175,7 +175,7 @@ def produto_list(request):
     if busca:
         qs = qs.filter(Q(nome__icontains=busca) | Q(sku__icontains=busca))
     if material_f:
-        qs = qs.filter(filamento__material=material_f)
+        qs = qs.filter(filamentos_produto__filamento__material=material_f).distinct()
 
     total_inativos = Produto.objects.filter(ativo=False).count()
 
@@ -203,12 +203,16 @@ def produto_list(request):
 @login_required
 def produto_create(request):
     form = ProdutoForm(request.POST or None)
-    if form.is_valid():
-        form.save()
+    formset = ProdutoFilamentoFormSet(request.POST or None)
+    if form.is_valid() and formset.is_valid():
+        produto = form.save()
+        formset.instance = produto
+        formset.save()
         messages.success(request, 'Produto cadastrado com sucesso!')
         return redirect('estoque:produto_list')
     return render(request, 'estoque/produto_form.html', {
         'form': form,
+        'formset': formset,
         'titulo': 'Novo Produto',
     })
 
@@ -217,12 +221,15 @@ def produto_create(request):
 def produto_update(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     form = ProdutoForm(request.POST or None, instance=produto)
-    if form.is_valid():
+    formset = ProdutoFilamentoFormSet(request.POST or None, instance=produto)
+    if form.is_valid() and formset.is_valid():
         form.save()
+        formset.save()
         messages.success(request, 'Produto atualizado com sucesso!')
         return redirect('estoque:produto_list')
     return render(request, 'estoque/produto_form.html', {
         'form': form,
+        'formset': formset,
         'titulo': 'Editar Produto',
         'objeto': produto,
     })
@@ -271,11 +278,19 @@ def produto_toggle_ativo(request, pk):
 def produto_preco_api(request, pk):
     """API interna: retorna preço de venda e estoque do produto (usado pelo form de venda)."""
     produto = get_object_or_404(Produto, pk=pk, ativo=True)
+    filamentos = produto.filamentos_produto.select_related('filamento').all()
+    filamentos_info = [
+        {
+            'filamento_id': pf.filamento_id,
+            'peso_filamento_g': str(pf.peso_filamento_g),
+            'disponivel_g': str(pf.filamento.peso_disponivel_g),
+        }
+        for pf in filamentos
+    ]
     return JsonResponse({
         'preco_venda': str(produto.preco_venda),
         'estoque': produto.estoque_quantidade,
-        'filamento_disponivel_g': str(produto.filamento.peso_disponivel_g),
-        'peso_filamento_g': str(produto.peso_filamento_g),
+        'filamentos': filamentos_info,
     })
 
 

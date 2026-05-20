@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Filamento, Produto
+from .models import Filamento, Produto, ProdutoFilamento
 
 
 @admin.register(Filamento)
@@ -10,9 +10,18 @@ class FilamentoAdmin(admin.ModelAdmin):
     readonly_fields = ['criado_em', 'atualizado_em']
 
 
+class ProdutoFilamentoInline(admin.TabularInline):
+    model = ProdutoFilamento
+    extra = 0
+    min_num = 1
+    max_num = 4
+    fields = ['filamento', 'peso_filamento_g', 'comprimento_filamento_m']
+
+
 @admin.register(Produto)
 class ProdutoAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'filamento', 'preco_venda', 'preco_custo', 'estoque_quantidade', 'ativo']
-    list_filter = ['ativo', 'filamento__material']
+    list_display = ['nome', 'preco_venda', 'preco_custo', 'estoque_quantidade', 'ativo']
+    list_filter = ['ativo']
     search_fields = ['nome', 'descricao']
     readonly_fields = ['criado_em', 'atualizado_em']
+    inlines = [ProdutoFilamentoInline]

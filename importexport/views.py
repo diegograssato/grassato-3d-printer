@@ -9,7 +9,7 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 
 from auditoria.decorators import admin_group_required
-from estoque.models import Filamento, Fornecedor, Produto
+from estoque.models import Filamento, Fornecedor, Produto, ProdutoFilamento
 
 # ──────────────────────────────────────────────
 # Definição dos cabeçalhos de cada tipo de CSV
@@ -83,15 +83,16 @@ def _export_produtos():
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=PRODUTO_HEADERS)
     writer.writeheader()
-    for p in Produto.objects.select_related('filamento__fornecedor').order_by('nome'):
+    for p in Produto.objects.prefetch_related('filamentos_produto__filamento').order_by('nome'):
+        pf = p.filamentos_produto.first()
         writer.writerow({
             'nome': p.nome,
             'descricao': p.descricao,
-            'filamento_nome': p.filamento.nome,
-            'filamento_cor': p.filamento.cor,
-            'filamento_material': p.filamento.material,
-            'peso_filamento_g': str(p.peso_filamento_g),
-            'comprimento_filamento_m': str(p.comprimento_filamento_m),
+            'filamento_nome': pf.filamento.nome if pf else '',
+            'filamento_cor': pf.filamento.cor if pf else '',
+            'filamento_material': pf.filamento.material if pf else '',
+            'peso_filamento_g': str(pf.peso_filamento_g) if pf else '0',
+            'comprimento_filamento_m': str(pf.comprimento_filamento_m) if pf else '0',
             'tempo_impressao_horas': str(p.tempo_impressao_horas),
             'preco_custo': str(p.preco_custo),
             'preco_venda': str(p.preco_venda),
@@ -200,12 +201,10 @@ def _import_produtos(rows):
         ativo = ativo_raw in ('true', '1', 'yes', 'sim')
 
         try:
-            _, is_new = Produto.objects.update_or_create(
-                nome=nome, filamento=filamento,
+            produto, is_new = Produto.objects.update_or_create(
+                nome=nome,
                 defaults={
                     'descricao': row.get('descricao', '').strip(),
-                    'peso_filamento_g': _safe_decimal(row.get('peso_filamento_g'), '0.01'),
-                    'comprimento_filamento_m': _safe_decimal(row.get('comprimento_filamento_m'), '0.01'),
                     'tempo_impressao_horas': _safe_decimal(row.get('tempo_impressao_horas'), '0.01'),
                     'preco_custo': _safe_decimal(row.get('preco_custo'), '0'),
                     'preco_venda': _safe_decimal(row.get('preco_venda'), '0.01'),
@@ -213,6 +212,21 @@ def _import_produtos(rows):
                     'ativo': ativo,
                 },
             )
+            # Cria ou atualiza o filamento principal (primeiro)
+            pf_qs = ProdutoFilamento.objects.filter(produto=produto)
+            if pf_qs.exists():
+                pf = pf_qs.first()
+                pf.filamento = filamento
+                pf.peso_filamento_g = _safe_decimal(row.get('peso_filamento_g'), '0.01')
+                pf.comprimento_filamento_m = _safe_decimal(row.get('comprimento_filamento_m'), '0.01')
+                pf.save()
+            else:
+                ProdutoFilamento.objects.create(
+                    produto=produto,
+                    filamento=filamento,
+                    peso_filamento_g=_safe_decimal(row.get('peso_filamento_g'), '0.01'),
+                    comprimento_filamento_m=_safe_decimal(row.get('comprimento_filamento_m'), '0.01'),
+                )
             if is_new:
                 created += 1
             else:

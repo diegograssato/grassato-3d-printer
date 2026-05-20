@@ -60,9 +60,8 @@
         <tr>
           <th class="text-muted small">SKU</th>
           <th>Nome</th>
-          <th>Filamento</th>
-          <th class="text-end">Peso/un (g)</th>
-          <th class="text-end">Comp. (m)</th>
+          <th>Filamento(s)</th>
+          <th class="text-end">Peso total/un (g)</th>
           <th class="text-end">Custo</th>
           <th class="text-end">Venda</th>
           <th class="text-end">Margem</th>
@@ -77,11 +76,14 @@
           <td class="text-muted small font-monospace">{{ p.sku }}</td>
           <td class="fw-semibold">{{ p.nome }}</td>
           <td>
-            <span class="badge bg-secondary">{{ p.filamento.material }}</span>
-            {{ p.filamento.cor }}
+            {% for pf in p.filamentos_produto.all %}
+              <span class="badge bg-secondary">{{ pf.filamento.material }}</span>
+              <small>{{ pf.filamento.cor }}</small>{% if not forloop.last %}<br>{% endif %}
+            {% empty %}
+              <span class="text-muted small">—</span>
+            {% endfor %}
           </td>
-          <td class="text-end">{{ p.peso_filamento_g|floatformat:1 }}</td>
-          <td class="text-end">{{ p.comprimento_filamento_m|floatformat:2 }}</td>
+          <td class="text-end">{{ p.peso_filamento_total_g|floatformat:1 }}</td>
           <td class="text-end text-muted">R$ {{ p.preco_custo|floatformat:2 }}</td>
           <td class="text-end text-success fw-semibold">R$ {{ p.preco_venda|floatformat:2 }}</td>
           <td class="text-end">

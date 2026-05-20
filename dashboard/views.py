@@ -51,7 +51,7 @@ def dashboard(request):
     saldo_caixa = total_entradas - total_saidas
 
     # Alertas de estoque baixo
-    produtos_criticos = Produto.objects.filter(estoque_quantidade__lte=2, ativo=True).select_related('filamento')
+    produtos_criticos = Produto.objects.filter(estoque_quantidade__lte=2, ativo=True).prefetch_related('filamentos_produto__filamento')
     filamentos_criticos = [f for f in Filamento.objects.all() if float(f.percentual_disponivel) <= 30]
 
     # Vendas recentes

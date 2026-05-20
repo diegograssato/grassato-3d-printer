@@ -1,5 +1,6 @@
 from django import forms
-from .models import Filamento, Produto, Fornecedor
+from django.forms import inlineformset_factory
+from .models import Filamento, Produto, ProdutoFilamento, Fornecedor
 
 
 class FornecedorForm(forms.ModelForm):
@@ -53,18 +54,41 @@ class ProdutoForm(forms.ModelForm):
     class Meta:
         model = Produto
         fields = [
-            'nome', 'descricao', 'filamento', 'peso_filamento_g',
-            'comprimento_filamento_m', 'tempo_impressao_horas',
+            'nome', 'descricao', 'tempo_impressao_horas',
             'preco_custo', 'preco_venda', 'estoque_quantidade',
         ]
         widgets = {
             'nome': forms.TextInput(attrs={'class': 'form-control'}),
             'descricao': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'filamento': forms.Select(attrs={'class': 'form-select'}),
-            'peso_filamento_g': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
-            'comprimento_filamento_m': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
             'tempo_impressao_horas': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
             'preco_custo': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
             'preco_venda': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
             'estoque_quantidade': forms.NumberInput(attrs={'class': 'form-control', 'min': '0'}),
         }
+
+
+class ProdutoFilamentoForm(forms.ModelForm):
+    class Meta:
+        model = ProdutoFilamento
+        fields = ['filamento', 'peso_filamento_g', 'comprimento_filamento_m']
+        widgets = {
+            'filamento': forms.Select(attrs={'class': 'form-select form-select-sm'}),
+            'peso_filamento_g': forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm', 'step': '0.01', 'min': '0.01',
+            }),
+            'comprimento_filamento_m': forms.NumberInput(attrs={
+                'class': 'form-control form-control-sm', 'step': '0.01', 'min': '0.01',
+            }),
+        }
+
+
+ProdutoFilamentoFormSet = inlineformset_factory(
+    Produto,
+    ProdutoFilamento,
+    form=ProdutoFilamentoForm,
+    min_num=1,
+    max_num=4,
+    extra=0,
+    validate_min=True,
+    can_delete=True,
+)
