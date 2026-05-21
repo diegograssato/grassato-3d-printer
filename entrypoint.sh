@@ -7,6 +7,9 @@ mkdir -p /app/media
 
 # Migrações e superusuário apenas no processo principal (app), não no worker
 if [ "$1" != "celery" ]; then
+    echo "==> Collecting static files..."
+    python manage.py collectstatic --noinput
+
     echo "==> Applying database migrations..."
     python manage.py migrate --noinput
 

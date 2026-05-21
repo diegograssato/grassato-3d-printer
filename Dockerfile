@@ -55,8 +55,8 @@ RUN python manage.py collectstatic --noinput
 # Usuário sem privilégios + diretórios graváveis
 RUN addgroup --system appgroup && \
     adduser --system --ingroup appgroup appuser && \
-    mkdir -p /app/data /app/media && \
-    chown -R appuser:appgroup /app/data /app/media /venv
+    mkdir -p /app/data /app/media /app/staticfiles && \
+    chown -R appuser:appgroup /app/data /app/media /app/staticfiles /venv
 USER appuser
 
 # SQLite default path (sobrescrito por DB_NAME em prod com MySQL)
