@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Body da impressora -->
+  <rect x="8" y="28" width="48" height="28" rx="3" ry="3" fill="#1b263b"/>
+  <!-- Plataforma de impressão -->
+  <rect x="12" y="50" width="40" height="4" rx="1" ry="1" fill="#0a3d62"/>
+  <!-- Eixo horizontal (trilho) -->
+  <rect x="6" y="22" width="52" height="5" rx="2" ry="2" fill="#3a86ff"/>
+  <!-- Cabeça de impressão (extrusor) -->
+  <rect x="26" y="14" width="12" height="10" rx="2" ry="2" fill="#ff6b6b"/>
+  <!-- Bico do extrusor -->
+  <polygon points="30,24 34,24 32,29" fill="#ff6b6b"/>
+  <!-- Filamento saindo do bico -->
+  <line x1="32" y1="29" x2="32" y2="38" stroke="#ffd166" stroke-width="2" stroke-linecap="round" stroke-dasharray="2,2"/>
+  <!-- Bobina de filamento (lado direito) -->
+  <circle cx="54" cy="20" r="7" fill="none" stroke="#0a3d62" stroke-width="3"/>
+  <circle cx="54" cy="20" r="2" fill="#3a86ff"/>
+  <!-- Pés da impressora -->
+  <rect x="12" y="56" width="8" height="4" rx="1" fill="#0d1b2a"/>
+  <rect x="44" y="56" width="8" height="4" rx="1" fill="#0d1b2a"/>
+  <!-- Tela/display -->
+  <rect x="14" y="33" width="14" height="9" rx="1" fill="#3a86ff" opacity="0.8"/>
+  <text x="21" y="40" font-size="6" fill="#fff" text-anchor="middle" font-family="monospace">3D</text>
+</svg>
