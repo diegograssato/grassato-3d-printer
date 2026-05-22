@@ -1,8 +1,8 @@
 """
 Signals do app integracoes:
-- pre_save em Produto  → detecta mudanças de nome/preço para sincronizar no ML
-- post_save em Produto → sincroniza estoque/status/nome/preço no ML
-- pre_delete em Produto → pausa anúncio no ML antes de excluir
+- pre_save em Produto  → detecta mudanças de nome/preço/ativo para rastrear no ML
+- post_save em Produto → enfileira task Celery (ml_sync) para sincronizar com ML
+- pre_delete em Produto → pausa anúncio ML SÍNCRONO antes de excluir
 """
 import logging
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @receiver(pre_save, sender='estoque.Produto')
 def produto_pre_save_track_ml(sender, instance, **kwargs):
     """
-    Rastreia mudanças de nome e preço antes do save.
+    Rastreia mudanças de nome, preço, ativo e estoque antes do save.
     O resultado é armazenado em instance._ml_changed_fields para uso no post_save.
     """
     if getattr(instance, '_skip_integracoes_signal', False):
@@ -29,9 +29,13 @@ def produto_pre_save_track_ml(sender, instance, **kwargs):
     try:
         old = sender.objects.get(pk=instance.pk)
         if old.nome != instance.nome:
-            instance._ml_changed_fields['title'] = instance.nome
+            instance._ml_changed_fields['title'] = True
         if old.preco_venda != instance.preco_venda:
-            instance._ml_changed_fields['price'] = float(instance.preco_venda)
+            instance._ml_changed_fields['price'] = True
+        if old.ativo != instance.ativo:
+            instance._ml_changed_fields['ativo'] = True
+        if old.estoque_quantidade != instance.estoque_quantidade:
+            instance._ml_changed_fields['estoque'] = True
     except sender.DoesNotExist:
         pass
 
@@ -39,18 +43,28 @@ def produto_pre_save_track_ml(sender, instance, **kwargs):
 @receiver(post_save, sender='estoque.Produto')
 def produto_post_save_ml(sender, instance, **kwargs):
     """
-    Sincroniza com o ML após salvar um produto:
-    - estoque = 0 → pausa o anúncio
-    - estoque > 0 e estava pausado → reativa + atualiza quantidade
-    - estoque > 0 e ativo → atualiza quantidade
-    - nome ou preço mudou → atualiza título/preço no anúncio
+    Enfileira uma task Celery (fila ml_sync) para cada ProdutoIntegracao ML ativa
+    quando nome, preço, estoque ou campo 'ativo' são alterados.
+
+    A sincronização em si é feita de forma assíncrona pela task
+    `integracoes.tasks.sincronizar_produto_ml`, que lê o estado mais recente
+    do banco — garantindo idempotência.
+
+    Signals de pre_delete permanecem síncronos pois precisam pausar o anúncio
+    antes que o objeto seja removido do banco.
     """
     if getattr(instance, '_skip_integracoes_signal', False):
         return
 
+    changed = getattr(instance, '_ml_changed_fields', {})
+
+    # Só enfileira se algum campo ML-relevante foi alterado ou é criação
+    if not kwargs.get('created') and not changed:
+        return
+
     try:
         from integracoes.models import ProdutoIntegracao
-        from integracoes.services.mercadolivre import MercadoLivreService
+        from integracoes.tasks import sincronizar_produto_ml
     except Exception:
         return
 
@@ -58,46 +72,23 @@ def produto_post_save_ml(sender, instance, **kwargs):
         produto=instance,
         integracao__plataforma='ML',
         integracao__ativa=True,
-    ).select_related('integracao')
+    ).values_list('pk', flat=True)
 
-    if not pis.exists():
-        return
-
-    ml = MercadoLivreService()
-    qtd = instance.estoque_quantidade
-    changed = getattr(instance, '_ml_changed_fields', {})
-
-    for pi in pis:
-        if not pi.sku_externo:
-            continue
+    for pi_pk in pis:
         try:
-            # ── Estoque / status ─────────────────────────────────────────────
-            if qtd <= 0:
-                ok = ml.pause_listing(pi.integracao, pi.sku_externo)
-                if ok and pi.status_externo != 'paused':
-                    pi.status_externo = 'paused'
-                    pi.save(update_fields=['status_externo'])
-                    logger.info('ML listing paused: %s (estoque zero)', pi.sku_externo)
-            elif pi.status_externo == 'paused':
-                ml.activate_listing(pi.integracao, pi.sku_externo)
-                ml.update_stock(pi.integracao, pi.sku_externo, qtd)
-                pi.status_externo = 'active'
-                pi.save(update_fields=['status_externo'])
-                logger.info('ML listing reactivated: %s (estoque=%d)', pi.sku_externo, qtd)
-            else:
-                ml.update_stock(pi.integracao, pi.sku_externo, qtd)
-                logger.debug('ML stock updated: %s → %d', pi.sku_externo, qtd)
-
-            # ── Nome / preço ─────────────────────────────────────────────────
-            if changed:
-                ok = ml.update_listing(pi.integracao, pi.sku_externo, changed)
-                if ok:
-                    logger.info('ML listing updated %s: %s', pi.sku_externo, list(changed.keys()))
-                else:
-                    logger.warning('ML listing update failed %s: %s', pi.sku_externo, changed)
-
+            sincronizar_produto_ml.apply_async(
+                args=[instance.pk, pi_pk],
+                queue='ml_sync',
+            )
+            logger.info(
+                'ML sync enfileirado: produto=%s pi=%s campos=%s',
+                instance.pk, pi_pk, list(changed.keys()),
+            )
         except Exception as exc:
-            logger.error('ML sync error for %s: %s', pi.sku_externo, exc)
+            logger.error(
+                'Falha ao enfileirar ML sync produto=%s pi=%s: %s',
+                instance.pk, pi_pk, exc,
+            )
 
 
 @receiver(pre_delete, sender='estoque.Produto')

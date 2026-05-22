@@ -158,7 +158,7 @@ services:
     command: >
       celery -A config worker
       --loglevel=info
-      --queues=ml_oauth,ml_orders,ml_status,default
+      --queues=ml_oauth,ml_orders,ml_status,ml_sync,default
       --concurrency=2
       --hostname=celery@%h
     healthcheck:

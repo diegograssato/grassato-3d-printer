@@ -174,6 +174,7 @@ CELERY_TASK_ROUTES = {
     'integracoes.tasks.processar_oauth_ml': {'queue': 'ml_oauth'},
     'integracoes.tasks.processar_pedido_ml': {'queue': 'ml_orders'},
     'integracoes.tasks.processar_status_ml': {'queue': 'ml_status'},
+    'integracoes.tasks.sincronizar_produto_ml': {'queue': 'ml_sync'},
 }
 
 CELERY_TASK_DEFAULT_QUEUE = 'default'

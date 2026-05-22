@@ -16,4 +16,7 @@ A sistema deve conter:
 - resumo financeiro
 
 Nova feature no sistema:
-- Configure o favicon, pode ser o icone de uma impressora 3d
+- Hoje quando é modificado o valor ou a quantidade do produto pelo sistema, já sensibiliza a integração de destino(MercadoLivre):
+    - Gostaria que essa ação imediata, fosse enviada para fila do celery, e processada(enviar as atualizações para integração de destino(MercadoLivre))
+    - A mesma coisa acontecer quando desativar um produto no sistema, fosse enviada para fila do celery, e processada(enviar as atualizações para integração de destino(MercadoLivre))
+Isso vai tornar o sistemas mais escalavél e as ações ficam mais rapidas, e se ouver algum problema emitir um evento de auditoria, para podermos analisar o ocorrido.    
