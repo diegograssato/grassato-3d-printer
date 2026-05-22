@@ -161,25 +161,82 @@ jobs:
           if [ -z "$SHA_TAG" ]; then
             SHA_TAG="${{ env.IMAGE }}:latest"
           fi
-          echo "🚀 Atualizando o Swarm com a imagem: $SHA_TAG"
-          FAILED=0
-          for srv in makers_app makers_celery makers_flower; do
+          echo "🚀 Implantando imagem: $SHA_TAG"
+
+          SERVICES="makers_app makers_celery makers_flower"
+          DEPLOY_FAILED=0
+
+          # ── 10.1 Captura imagem atual de cada serviço (checkpoint de rollback) ──
+          declare -A PREVIOUS_IMAGE
+          for srv in $SERVICES; do
+            img=$(docker service inspect "$srv" \
+              --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || true)
+            if [ -z "$img" ]; then
+              echo "⚠️  Serviço $srv não encontrado no Swarm — snapshot ignorado."
+            else
+              PREVIOUS_IMAGE[$srv]="$img"
+              echo "📸 Snapshot $srv → $img"
+            fi
+          done
+
+          # ── 10.2 Atualiza cada serviço e aguarda convergência com healthcheck ──
+          # --detach=false bloqueia até o Swarm declarar sucesso (ou falha)
+          # eliminando deploys "verdes no CI mas quebrados em produção".
+          for srv in $SERVICES; do
+            echo ""
             echo "  → atualizando $srv ..."
             if docker service update \
                 --image "$SHA_TAG" \
                 --with-registry-auth \
+                --detach=false \
                 "$srv"; then
-              echo "  ✅ $srv atualizado"
+              echo "  ✅ $srv atualizado e estável"
             else
-              echo "  ❌ falha ao atualizar $srv (exit $?)"
-              FAILED=$((FAILED + 1))
+              echo "  ❌ $srv falhou na atualização/convergência"
+              DEPLOY_FAILED=1
+              break
             fi
           done
-          if [ "$FAILED" -gt 0 ]; then
-            echo "❌ $FAILED serviço(s) falharam na atualização."
+
+          # ── 10.3 Rollback automático em caso de falha ────────────────────
+          if [ "$DEPLOY_FAILED" -eq 1 ]; then
+            echo ""
+            echo "🔄 Deploy falhou — iniciando rollback para imagens anteriores..."
+            ROLLBACK_ERRORS=0
+
+            for srv in $SERVICES; do
+              prev="${PREVIOUS_IMAGE[$srv]:-}"
+              if [ -z "$prev" ]; then
+                echo "  ⚠️  $srv: sem snapshot — usando rollback interno do Swarm"
+                docker service update --rollback --detach=false "$srv" \
+                  && echo "  ✅ $srv revertido (swarm rollback)" \
+                  || { echo "  ❌ rollback de $srv falhou"; ROLLBACK_ERRORS=$((ROLLBACK_ERRORS + 1)); }
+              else
+                echo "  ↩️  $srv: restaurando → $prev"
+                if docker service update \
+                    --image "$prev" \
+                    --with-registry-auth \
+                    --detach=false \
+                    "$srv"; then
+                  echo "  ✅ $srv revertido"
+                else
+                  echo "  ❌ rollback de $srv falhou — intervenção manual necessária"
+                  ROLLBACK_ERRORS=$((ROLLBACK_ERRORS + 1))
+                fi
+              fi
+            done
+
+            echo ""
+            if [ "$ROLLBACK_ERRORS" -gt 0 ]; then
+              echo "❌ Rollback parcial: $ROLLBACK_ERRORS serviço(s) não foram revertidos."
+            else
+              echo "✅ Rollback concluído — todos os serviços restaurados à imagem anterior."
+            fi
             exit 1
           fi
-          echo "✅ Todos os serviços atualizados com sucesso."
+
+          echo ""
+          echo "✅ 🐳 Deploy concluído — todos os serviços estáveis."
 
       # ── 11. Limpeza de disco no Runner ─────────────────────────────────
       - name: Cleanup old Docker images
