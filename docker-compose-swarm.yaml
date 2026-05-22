@@ -1,7 +1,17 @@
 version: '3.8'
 
+# Ordem de inicialização garantida por healthchecks:
+#   database → (redis em paralelo) → app → nginx
+#                                  → celery
+#                                  → flower
+#
+# depends_on é ignorado pelo Swarm; os serviços sobem todos ao mesmo tempo.
+# A resiliência vem do restart_policy + healthcheck: serviços que dependem
+# de DB/Redis vão falhar e reiniciar até que os healthchecks passem.
+
 services:
-  # ── Banco de Dados (MySQL) ────────────────────
+
+  # ── Banco de Dados (MariaDB) ──────────────────
   database:
     image: mariadb:10.11
     environment:
@@ -13,26 +23,46 @@ services:
       - mysql_data:/var/lib/mysql
     networks:
       - backend
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-panna"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     deploy:
       mode: replicated
       replicas: 1
       restart_policy:
         condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 60s
+      placement:
+        constraints:
+          - node.role == manager
 
   # ── Cache / Fila (Redis) ──────────────────────
   redis:
-    # Mudança crucial: remove o '-alpine' e usa a versão estável Debian para ARM
     image: redis:7.4-bookworm
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     networks:
       - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     deploy:
       mode: replicated
       replicas: 1
       restart_policy:
         condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 60s
 
   # ── Django + Gunicorn ─────────────────────────
   app:
@@ -58,18 +88,14 @@ services:
       DB_PASSWORD: "anna"
       DB_HOST: tasks.database
       DB_PORT: "3306"
-      REDIS_URL: "redis://redis:6379" # Alterado de IP para o nome do serviço
+      REDIS_URL: "redis://redis:6379/0"
       GUNICORN_WORKERS: "3"
       GUNICORN_THREADS: "4"
       DJANGO_SUPERUSER_USERNAME: "admin"
       DJANGO_SUPERUSER_EMAIL: "diego.grassato@gmail.com"
       DJANGO_SUPERUSER_PASSWORD: "admin123"
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
-    ports:
-      - target: 8000
-        published: 8000
-        mode: ingress
+      CELERY_BROKER_URL: "redis://redis:6379/1"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/2"
     expose:
       - 8000
     volumes:
@@ -77,21 +103,30 @@ services:
       - media_files:/app/media
     networks:
       - backend
-    depends_on: 
-      - database
-      - redis
     deploy:
       mode: replicated
       replicas: 1
       restart_policy:
         condition: on-failure
-        delay: 10s
+        delay: 15s
         max_attempts: 5
-        window: 60s
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 30s
+        failure_action: rollback
+        order: start-first      # sobe novo container antes de derrubar o antigo
 
   # ── Nginx (proxy reverso + static files) ─────
   nginx:
     image: diegograssato/nginx_app_web:latest
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost/ 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     ports:
       - target: 80
         published: 8080
@@ -102,83 +137,117 @@ services:
     networks:
       - backend
       - npm_public
-    depends_on:
-      - app
     deploy:
       mode: replicated
       replicas: 1
       restart_policy:
-        condition: on-failure  
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 60s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: start-first
 
-  # ── Celery Worker ─────────────────────────────────────────────────────────
+  # ── Celery Worker ─────────────────────────────
   celery:
     image: diegograssato/grassato-3d-printer:latest
-    restart: unless-stopped
-    depends_on:
-      - database
-      - redis
+    stop_grace_period: 120s   # tempo para tasks em andamento terminarem
     command: >
       celery -A config worker
-      --loglevel=debug
+      --loglevel=info
       --queues=ml_oauth,ml_orders,ml_status,default
       --concurrency=2
       --hostname=celery@%h
+    healthcheck:
+      # Verifica se o processo PID 1 é o celery worker (exec no entrypoint garante isso).
+      # Evita carregar Django+Redis a cada check — leve e confiável em ARM.
+      test: ["CMD-SHELL", "grep -q celery /proc/1/cmdline || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     environment:
-     SECRET_KEY: "AsdkaoskoaAqeqwowqw3"
-     DEBUG: "False"
-     ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96,150.136.151.56,grassato-makers.duckdns.org"
-     CSRF_TRUSTED_ORIGINS: "http://grassato-makers.duckdns.org,https://grassato-makers.duckdns.org,http://10.22.0.96:8080,http://localhost,http://127.0.0.1"
-     ML_CALLBACK_URI: "https://grassato-makers.duckdns.org/integracoes/ml/callback/"
-     USE_X_FORWARDED_HOST: "True"
-     HTTP_X_FORWARDED_PROTO: "http"
-     DB_ENGINE: mysql
-     DB_NAME: "grassato-3d"
-     DB_USER: "diego"
-     DB_PASSWORD: "anna"
-     DB_HOST: tasks.database
-     DB_PORT: "3306"
-     REDIS_URL: "redis://redis:6379" # Alterado de IP para o nome do serviço
-     GUNICORN_WORKERS: "3"
-     GUNICORN_THREADS: "4"
-     DJANGO_SUPERUSER_USERNAME: "admin"
-     DJANGO_SUPERUSER_EMAIL: "diego.grassato@gmail.com"
-     DJANGO_SUPERUSER_PASSWORD: "admin123"
-     CELERY_BROKER_URL: redis://redis:6379/1
-     CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: "AsdkaoskoaAqeqwowqw3"
+      DEBUG: "False"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96,150.136.151.56,grassato-makers.duckdns.org"
+      CSRF_TRUSTED_ORIGINS: "http://grassato-makers.duckdns.org,https://grassato-makers.duckdns.org,http://10.22.0.96:8080,http://localhost,http://127.0.0.1"
+      ML_CALLBACK_URI: "https://grassato-makers.duckdns.org/integracoes/ml/callback/"
+      USE_X_FORWARDED_HOST: "True"
+      HTTP_X_FORWARDED_PROTO: "http"
+      DB_ENGINE: mysql
+      DB_NAME: "grassato-3d"
+      DB_USER: "diego"
+      DB_PASSWORD: "anna"
+      DB_HOST: tasks.database
+      DB_PORT: "3306"
+      REDIS_URL: "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/1"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/2"
     volumes:
-      - static_files:/usr/share/nginx/html/static:ro 
-      - media_files:/usr/share/nginx/html/media:ro
+      - static_files:/app/staticfiles
+      - media_files:/app/media
     networks:
       - backend
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 15s
+        max_attempts: 5
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 30s
+        failure_action: rollback
+        order: stop-first       # stop-first: tasks em andamento terminam antes do novo subir
 
-  # ── Celery Flower (Monitoramento Web) ─────────────────────────────────────
+  # ── Celery Flower (Monitoramento Web) ─────────
   flower:
     image: diegograssato/grassato-3d-printer:latest
-    restart: unless-stopped
     command: >
       celery -A config flower
       --port=5555
       --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+      --inspect_timeout=5000
+    healthcheck:
+      # /proc/net/tcp lista todos os sockets TCP do kernel.
+      # 5555 em hex = 0x15B3 → busca ':15B3 ' na tabela de sockets.
+      # Zero overhead: leitura de arquivo, sem Python, sem rede — ARM-safe.
+      test: ["CMD-SHELL", "grep -q ':15B3 ' /proc/net/tcp || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     environment:
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      CELERY_BROKER_URL: "redis://redis:6379/1"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/2"
     ports:
       - target: 5555
         published: 5555
-        mode: host      
-    depends_on:
-      - redis
+        mode: host
     networks:
       - backend
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+        window: 60s
 
 volumes:
   static_files:
   media_files:
   redis_data:
-  mysql_data:                   # Volume persistente para o banco de dados
+  mysql_data:
 
 networks:
   backend:
-    external: true  
+    external: true
   npm_public:
-    external: true    
+    external: true

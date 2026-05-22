@@ -186,4 +186,8 @@ jobs:
         if: always()
         run: |
           docker system prune -f
+          sleep 2
+          docker image prune -a -f
+          sleep 2
+          docker volume prune -a -f
           echo "✅ Limpeza concluída."
