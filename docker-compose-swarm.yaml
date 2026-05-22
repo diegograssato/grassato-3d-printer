@@ -21,7 +21,11 @@ services:
 
   # ── Cache / Fila (Redis) ──────────────────────
   redis:
-    image: redis:7-alpine
+    # Mudança crucial: remove o '-alpine' e usa a versão estável Debian para ARM
+    image: redis:7.4-bookworm
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
     networks:
       - backend
     deploy:
@@ -33,10 +37,17 @@ services:
   # ── Django + Gunicorn ─────────────────────────
   app:
     image: diegograssato/grassato-3d-printer:latest
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     environment:
       SECRET_KEY: "AsdkaoskoaAqeqwowqw3"
-      DEBUG: "True"
-      ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96,grassato-makers.duckdns.org"
+      DEBUG: "False"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96,150.136.151.56,grassato-makers.duckdns.org"
       CSRF_TRUSTED_ORIGINS: "http://grassato-makers.duckdns.org,https://grassato-makers.duckdns.org,http://10.22.0.96:8080,http://localhost,http://127.0.0.1"
       ML_CALLBACK_URI: "https://grassato-makers.duckdns.org/integracoes/ml/callback/"
       USE_X_FORWARDED_HOST: "True"
@@ -53,6 +64,8 @@ services:
       DJANGO_SUPERUSER_USERNAME: "admin"
       DJANGO_SUPERUSER_EMAIL: "diego.grassato@gmail.com"
       DJANGO_SUPERUSER_PASSWORD: "admin123"
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
     ports:
       - target: 8000
         published: 8000
@@ -69,9 +82,12 @@ services:
       - redis
     deploy:
       mode: replicated
-      replicas: 2
+      replicas: 1
       restart_policy:
         condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 60s
 
   # ── Nginx (proxy reverso + static files) ─────
   nginx:
@@ -110,7 +126,7 @@ services:
     environment:
      SECRET_KEY: "AsdkaoskoaAqeqwowqw3"
      DEBUG: "False"
-     ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96,grassato-makers.duckdns.org"
+     ALLOWED_HOSTS: "localhost,127.0.0.1,10.22.0.96,150.136.151.56,grassato-makers.duckdns.org"
      CSRF_TRUSTED_ORIGINS: "http://grassato-makers.duckdns.org,https://grassato-makers.duckdns.org,http://10.22.0.96:8080,http://localhost,http://127.0.0.1"
      ML_CALLBACK_URI: "https://grassato-makers.duckdns.org/integracoes/ml/callback/"
      USE_X_FORWARDED_HOST: "True"
@@ -128,7 +144,7 @@ services:
      DJANGO_SUPERUSER_EMAIL: "diego.grassato@gmail.com"
      DJANGO_SUPERUSER_PASSWORD: "admin123"
      CELERY_BROKER_URL: redis://redis:6379/1
-     CELERY_RESULT_BACKEND: redis://redis:6379/1
+     CELERY_RESULT_BACKEND: redis://redis:6379/2
     volumes:
       - static_files:/usr/share/nginx/html/static:ro 
       - media_files:/usr/share/nginx/html/media:ro
@@ -145,7 +161,7 @@ services:
       --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
     environment:
       CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
     ports:
       - target: 5555
         published: 5555
@@ -158,6 +174,7 @@ services:
 volumes:
   static_files:
   media_files:
+  redis_data:
   mysql_data:                   # Volume persistente para o banco de dados
 
 networks:
